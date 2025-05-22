@@ -28,18 +28,41 @@ body, html {
 
 .nav-links {
   display: flex;
-  gap: 2rem;
+  gap: 1rem;
 }
 
-.nav-link {
-  color: #FFD700;
+.nav-button {
+  padding: 0.75rem 1.5rem;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
   text-decoration: none;
-  font-size: 1.2rem;
-  transition: color 0.3s;
 }
 
-.nav-link:hover {
-  color: #fff;
+.login-btn {
+  background-color: transparent;
+  color: #FFD700;
+  border-color: #FFD700;
+}
+
+.login-btn:hover {
+  background-color: #FFD700;
+  color: #0E3459;
+}
+
+.register-btn {
+  background-color: #FFD700;
+  color: #0E3459;
+  border-color: #FFD700;
+}
+
+.register-btn:hover {
+  background-color: transparent;
+  color: #FFD700;
+  border-color: #FFD700;
 }
 
 /* Hero section styles */
@@ -56,6 +79,7 @@ body, html {
   padding: 4rem 0;
   max-width: 1200px;
   margin: 0 auto;
+  text-align: center;
 }
 
 .box-logo {
@@ -69,6 +93,7 @@ body, html {
 
 .hero-text {
   flex: 1;
+  margin-left: 2rem; /* Ajusta este valor para mover el texto más a la derecha */
 }
 
 .hero-text h1 {
@@ -90,7 +115,8 @@ body, html {
 
 .feature-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 1rem;
 }
 
@@ -103,10 +129,18 @@ body, html {
 .feature-text {
   font-size: 1.2rem;
   line-height: 1.5;
+  margin-right: 0.2rem;
 }
 
+.feature-description {
+  font-size: 1.2rem;
+  line-height: 1.5;
+  font-style: italic;
+}
+
+
 .cta-text {
-  margin-top: 4rem;
+  margin-top: 2rem; /* Ajusta este valor para mover arriba (menor valor) o abajo (mayor valor) */
   font-style: italic;
   font-size: 1.2rem;
 }
