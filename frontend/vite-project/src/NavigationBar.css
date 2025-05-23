@@ -1,0 +1,70 @@
+.navbar-bar {
+  width: 250px;
+  background: #13375a;
+  color: #b9d2e6;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 100;
+  font-family: 'Georgia', serif;
+}
+
+.navbar-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
+.navbar-logo img {
+  width: 60px;
+  margin-bottom: 0.5rem;
+}
+
+.navbar-title {
+  font-size: 1.1rem;
+  letter-spacing: 1px;
+  color: #b9d2e6;
+}
+
+.navbar-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  align-items: flex-start;
+  margin-left: 2.5rem;
+}
+
+.navbar-links li button {
+  background: none;
+  border: none;
+  color: #b9d2e6;
+  font-size: 1.15rem;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s, font-weight 0.2s;
+  font-family: inherit;
+}
+
+.navbar-links li button:hover,
+.navbar-links li button.active {
+  color: #FFD700;
+  font-weight: bold;
+}
+
+.navbar-account {
+  margin: 2rem 0 1rem 1rem;
+  font-size: 1rem;
+  color: #b9d2e6;
+  border-top: 1px solid #29507a;
+  padding-top: 1rem;
+}
