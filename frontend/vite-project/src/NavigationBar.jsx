@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { Menu, X, Home, Search, Settings, User } from 'lucide-react';
 import logo from './assets/logo.svg';
 import './NavigationBar.css';
+import { Link, useLocation } from 'react-router-dom';
+
+
+
 
 export default function NavigationBar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -13,6 +17,8 @@ export default function NavigationBar() {
     { name: 'Configuration', icon: Settings }
   ];
 
+  const location = useLocation();
+  
   const handleNavClick = (itemName) => {
     setActiveItem(itemName);
     // Here you would typically handle navigation/routing
