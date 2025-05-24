@@ -1,8 +1,8 @@
 import re
 import json
+import sys
 import os
 import csv
-import datetime
 
 class SQLParser:
     def __init__(self):
@@ -64,70 +64,56 @@ class SQLParser:
             return None
 
     def _parse_create_table(self, query):
-        match = re.match(r"CREATE\s+TABLE\s+(\w+)\s*\((.+)\)", query, re.IGNORECASE)
+        match = re.match(r"CREATE\s+TABLE\s+(\w+)\s*\((.+)\)", query, re.IGNORECASE | re.DOTALL)
         if not match:
-            raise SyntaxError("CREATE TABLE <nombre> (col1 type [constraints], ...)")
+            raise SyntaxError("CREATE TABLE <nombre> (col1 type [constraints] [INDEX <tipo>], ...)")
 
         table_name = match.group(1)
         columns_str = match.group(2).strip()
+
+        definitions_str_list = re.split(r',(?![^\[]*\])(?![^\(]*\))', columns_str)
+
         parsed_columns = []
-
-        balance = 0
-        current_col_start = 0
-        definitions_str_list = []
-        for i, char in enumerate(columns_str):
-            if char == '(':
-                balance += 1
-            elif char == ')':
-                balance -= 1
-            elif char == ',' and balance == 0:
-                definitions_str_list.append(columns_str[current_col_start:i].strip())
-                current_col_start = i + 1
-        definitions_str_list.append(columns_str[current_col_start:].strip())
-
         for col_def_str in definitions_str_list:
+            col_def_str = col_def_str.strip()
             if not col_def_str:
                 continue
 
-            parts = col_def_str.split()
-            if len(parts) < 2:
-                raise SyntaxError(f"Definicion de columna '{col_def_str}' malformada")
+            main_parts_match = re.match(r"(\w+)\s+([\w\[\]\(\)]+)\s*(.*)", col_def_str, re.IGNORECASE)
+            if not main_parts_match:
+                raise SyntaxError(f"Definicion de columna malformada: '{col_def_str}'")
 
-            col_name = parts[0]
-            col_type_str = parts[1].upper()
+            col_name, col_type_raw, rest_of_def = main_parts_match.groups()
+
+            col_type_upper = col_type_raw.upper()
+            type_details = {}
+            if col_type_upper.startswith("VARCHAR"):
+                col_type = "VARCHAR"
+                size_match = re.search(r"\((\d+)\)", col_type_upper)
+                if size_match:
+                    type_details['size'] = int(size_match.group(1))
+            elif col_type_upper.startswith("ARRAY"):
+                col_type = "ARRAY"
+                subtype_match = re.search(r"\[([^\]]+)\]", col_type_upper)
+                if subtype_match:
+                    type_details['subtype'] = subtype_match.group(1)
+            else:
+                col_type = col_type_upper
+
             constraints = []
             index_info = None
-            type_details = {}
 
-            type_match_varchar = re.match(r"VARCHAR\((\d+)\)", col_type_str, re.IGNORECASE)
-            type_match_array = re.match(r"ARRAY\[([^\]]+)\]", col_type_str, re.IGNORECASE)
+            if "PRIMARY KEY" in rest_of_def.upper():
+                constraints.append("PRIMARY KEY")
 
-            if type_match_varchar:
-                col_type = "VARCHAR"
-                type_details = {'size': int(type_match_varchar.group(1))}
-            elif type_match_array:
-                col_type = "ARRAY"
-                type_details = {'subtype': type_match_array.group(1).upper()}
-            else:
-                col_type = col_type_str
-
-            remaining_parts = parts[2:]
-            i = 0
-            while i < len(remaining_parts):
-                part = remaining_parts[i].upper()
-                if part == "PRIMARY" and i + 1 < len(remaining_parts) and remaining_parts[i+1].upper() == "KEY":
-                    constraints.append("PRIMARY KEY")
-                    i += 1
-                elif part == "INDEX":
-                    constraints.append("INDEX")
-                    if i + 1 < len(remaining_parts):
-                        index_info = {'type': remaining_parts[i+1]}
-                        i += 1
-                    else:
-                        index_info = {'type': None}
+            other_keywords = re.findall(r"NOT NULL|UNIQUE|INDEX\s+\w+", rest_of_def, re.IGNORECASE)
+            for keyword in other_keywords:
+                kw_upper = keyword.upper()
+                if kw_upper.startswith("INDEX"):
+                    index_info = {'type': kw_upper.split()[1]}
                 else:
-                    constraints.append(part)
-                i += 1
+                    if kw_upper not in constraints:
+                        constraints.append(kw_upper)
 
             parsed_columns.append({
                 'name': col_name,
@@ -357,335 +343,357 @@ class SQLParser:
             raise SyntaxError("DROP TABLE <nombre>")
         return {'command': 'DROP_TABLE', 'table_name': match.group(1)}
 
+class QueryOptimizer:
+    def create_plan(self, table_metadata, where_clause_tree):
+        available_indexes = table_metadata.get('indexes', {})
+
+        if not where_clause_tree:
+            return {'type': 'FULL_TABLE_SCAN'}
+
+        conditions = self._flatten_conditions(where_clause_tree)
+
+        for condition in conditions:
+            if condition['operator'] == '=':
+                column = condition['column']
+                if column in available_indexes:
+                    index_info = available_indexes[column]
+                    return {
+                        'type': 'INDEX_SCAN',
+                        'index_column': column,
+                        'index_type': index_info['type'],
+                        'search_key': condition['value'],
+                        'filter_after': where_clause_tree
+                    }
+
+        return {
+            'type': 'FULL_TABLE_SCAN',
+            'filter': where_clause_tree
+        }
+
+    def _flatten_conditions(self, node):
+        if not node:
+            return []
+
+        if node['type'] == 'logical':
+            return self._flatten_conditions(node['left']) + self._flatten_conditions(node['right'])
+        elif node['type'] == 'condition':
+            return [node]
+        return []
+
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+indices_dir = os.path.join(project_root, 'indices')
+
+if indices_dir not in sys.path:
+    sys.path.insert(0, indices_dir)
+
+from avl_file import AVLFile
+from bplus_tree import BPlusTreeFile
+from extendible_hash import DynamicHashFile
+from isam import ISAMFile
+from rtree import RTreeFile, Box
 
 class DatabaseManager:
     def __init__(self, db_directory="db_data"):
-        self._tables = {}
-        self._parser = SQLParser()
         self.db_directory = db_directory
+        self.metadata_file = os.path.join(db_directory, "db_metadata.json")
+        self.tables_metadata = {}
+        self.active_indexes = {}
         self._ensure_db_directory()
-        self._load_all_tables_from_disk()
+        self._load_metadata()
 
     def _ensure_db_directory(self):
-        if not os.path.exists(self.db_directory):
-            try:
-                os.makedirs(self.db_directory)
-            except OSError as e:
-                raise OSError(f"Error creando directorio '{self.db_directory}': {e}")
+        os.makedirs(self.db_directory, exist_ok=True)
 
-    def _get_table_filepath(self, table_name_key: str):
-        return os.path.join(self.db_directory, f"{table_name_key}.json")
+    def _load_metadata(self):
+        if os.path.exists(self.metadata_file):
+            with open(self.metadata_file, 'r', encoding="utf-8") as f:
+                self.tables_metadata = json.load(f)
+            print("Metadatos cargados")
+        else:
+            print("No se encontraron metadatos, se creara uno nuevo")
 
-    def _save_table_to_disk(self, table_name_key: str):
-        if table_name_key not in self._tables:
-            return
-        filepath = self._get_table_filepath(table_name_key)
-        try:
-            table_data_to_save = {
-                'columns': self._tables[table_name_key]['columns'],
-                'rows': self._tables[table_name_key]['rows'],
-                'original_name': self._tables[table_name_key].get('original_name', table_name_key.capitalize())
-            }
-            with open(filepath, 'w') as f:
-                json.dump(table_data_to_save, f, indent=4)
-        except (IOError, TypeError) as e:
-            print(f"Error guardando tabla '{table_name_key}' a '{filepath}': {e}")
+    def _save_metadata(self):
+        with open(self.metadata_file, 'w', encoding="utf-8") as f:
+            json.dump(self.tables_metadata, f, indent=4)
+        print("Metadatos guardados")
 
-    def _load_table_from_disk(self, table_name_key: str):
-        filepath = self._get_table_filepath(table_name_key)
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, 'r') as f:
-                    loaded_data = json.load(f)
-                    self._tables[table_name_key] = {
-                        'columns': loaded_data.get('columns', []),
-                        'rows': loaded_data.get('rows', []),
-                        'original_name': loaded_data.get('original_name', table_name_key.capitalize())
-                    }
-                return True
-            except (IOError, json.JSONDecodeError) as e:
-                print(f"Error cargando tabla '{table_name_key}' desde '{filepath}': {e}")
-        return False
+    def _get_index_instance(self, table_name, index_info):
+        table_name_key = table_name.lower()
+        index_col = index_info['column']
+        index_key = f"{table_name_key}_{index_col}"
 
-    def _load_all_tables_from_disk(self):
-        if not os.path.exists(self.db_directory):
-            return
-        print(f"Cargando tablas desde '{self.db_directory}'...")
-        count = 0
-        for filename in os.listdir(self.db_directory):
-            if filename.endswith(".json"):
-                table_name_key = os.path.splitext(filename)[0]
-                if self._load_table_from_disk(table_name_key):
-                    count += 1
-        print(f"Carga completada. {count} tablas cargadas.")
+        if index_key in self.active_indexes:
+            return self.active_indexes[index_key]
 
-    def _delete_table_file(self, table_name_key: str):
-        filepath = self._get_table_filepath(table_name_key)
-        if os.path.exists(filepath):
-            try:
-                os.remove(filepath)
-            except OSError as e:
-                print(f"Error eliminando archivo '{filepath}': {e}")
+        index_type = index_info['type'].lower()
+        data_file_path = os.path.join(self.db_directory, f"{table_name_key}.jsonl")
+        index_file_path = os.path.join(self.db_directory, f"{index_key}.idx")
 
-    def _get_col_def(self, table_schema: list, col_name_to_find: str):
-        return next((cd for cd in table_schema if cd['name'].lower() == col_name_to_find.lower()), None)
+        instance = None
+        if index_type == 'btree':
+            instance = BPlusTreeFile(data_file=data_file_path, index_file=index_file_path)
+        elif index_type == 'hash':
+            instance = DynamicHashFile(data_file=data_file_path, index_file=index_file_path)
+        elif index_type == 'avl':
+             instance = AVLFile(data_file=data_file_path, index_file=index_file_path)
+        elif index_type == 'rtree':
+             instance = RTreeFile(data_file=data_file_path, index_file=index_file_path)
+        elif index_type == 'isam':
+             meta_file_path = os.path.join(self.db_directory, f"{index_key}_meta.pkl")
+             instance = ISAMFile(data_file=data_file_path, index_file=index_file_path, meta_file=meta_file_path)
 
-    def _cast_value_for_comparison(self, value_str, target_schema_type: str):
-        target_type_upper = target_schema_type.upper() if target_schema_type else "TEXT"
-        if value_str is None:
-            return None
-
-        if target_type_upper == 'ARRAY' and isinstance(value_str, str) and value_str.startswith('[') and value_str.endswith(']'):
-            try:
-                return json.loads(value_str)
-            except json.JSONDecodeError:
-                pass
-        try:
-            if target_type_upper == 'INT':
-                return int(value_str)
-            if target_type_upper == 'FLOAT':
-                return float(value_str)
-            if target_type_upper == 'DATE':
-                return datetime.strptime(value_str, '%Y-%m-%d').date() # NOTE: we may change this format as we go
-        except (ValueError, TypeError):
-            pass
-        return value_str
-
-    def _evaluate_expression_tree(self, row: dict, node: dict, table_schema: list) -> bool:
-        if node is None:
-            return True
-
-        node_type = node.get('type')
-
-        if node_type == 'logical':
-            left_result = self._evaluate_expression_tree(row, node['left'], table_schema)
-            op = node['op'].upper()
-            if op == 'AND':
-                return left_result and self._evaluate_expression_tree(row, node['right'], table_schema)
-            if op == 'OR':
-                return left_result or self._evaluate_expression_tree(row, node['right'], table_schema)
-
-        elif node_type == 'condition':
-            col_name_from_cond = node['column']
-            operator = node['operator']
-            condition_val_parsed = node['value']
-
-            schema_col_def = self._get_col_def(table_schema, col_name_from_cond)
-            if not schema_col_def:
-                raise ValueError(f"Columna '{col_name_from_cond}' no encontrada en schema")
-
-            row_val = row.get(schema_col_def['name'])
-            casted_condition_val = None
-
-            try:
-                if operator == 'BETWEEN':
-                    if not isinstance(condition_val_parsed, list) or len(condition_val_parsed) != 2:
-                        return False
-                    val1_casted = self._cast_value_for_comparison(condition_val_parsed[0], schema_col_def['type'])
-                    val2_casted = self._cast_value_for_comparison(condition_val_parsed[1], schema_col_def['type'])
-                    if val1_casted is None or val2_casted is None:
-                        return False
-                    casted_condition_val = [val1_casted, val2_casted]
-                else:
-                    casted_condition_val = self._cast_value_for_comparison(condition_val_parsed, schema_col_def['type'])
-            except Exception as cast_err:
-                raise ValueError(f"Error during value casting: {cast_err}")
-
-            is_null_check = isinstance(casted_condition_val, str) and casted_condition_val.upper() == 'NULL'
-            if row_val is None:
-                if operator == '=' and is_null_check:
-                    return True
-                if operator == '!=' and is_null_check:
-                    return False
-                return False
-
-            if is_null_check:
-                return operator == '!='
-
-            try:
-                if operator == '=':
-                    return row_val == casted_condition_val
-                if operator == '!=':
-                    return row_val != casted_condition_val
-                if operator == '>':
-                    return row_val > casted_condition_val
-                if operator == '<':
-                    return row_val < casted_condition_val
-                if operator == '>=':
-                    return row_val >= casted_condition_val
-                if operator == '<=':
-                    return row_val <= casted_condition_val
-                if operator == 'BETWEEN':
-                    if not isinstance(casted_condition_val, list):
-                        return False
-                    lower, upper = casted_condition_val
-                    return lower <= row_val <= upper
-            except TypeError:
-                return False
-            except Exception as comp_err:
-                raise RuntimeError(f"Error inesperado durante comparacion: {comp_err}")
-
-        raise ValueError(f"Nodo de expresion desconocido: {node}")
+        if instance:
+            self.active_indexes[index_key] = instance
+        return instance
 
     def execute_query(self, query):
+        parser = SQLParser()
+        parsed_command = parser.parse(query)
+
+        if not parsed_command:
+            return "Error: consulta invalida"
+
+        command = parsed_command.get('command')
+        table_name = parsed_command.get('table_name')
+
+        if command == 'CREATE_TABLE':
+            return self.create_table(parsed_command)
+
+        if command == 'CREATE_TABLE_FROM_FILE':
+            return self.create_table_from_file(parsed_command)
+
+        if command == 'INSERT':
+            return self.insert_into(parsed_command)
+
+        if command == 'SELECT':
+            return self.select_from(parsed_command)
+
+        if command == 'DELETE':
+            return self.delete_from(parsed_command)
+
+        if command == 'DROP_TABLE':
+             return self.drop_table(table_name)
+
+        return f"Comando '{command}' no reconocido o no implementado"
+
+    def create_table(self, command_data):
+        table_name = command_data['table_name']
+        table_name_key = table_name.lower()
+        if table_name_key in self.tables_metadata:
+            return f"Error: la tabla '{table_name}' ya existe"
+
+        self.tables_metadata[table_name_key] = {
+            'original_name': table_name,
+            'columns': command_data['columns'],
+            'indexes': {}
+        }
+
+        for col in command_data['columns']:
+            if col.get('index_info'):
+                index_type = col['index_info'].get('type')
+                if index_type:
+                    self.tables_metadata[table_name_key]['indexes'][col['name']] = {
+                        'type': index_type.lower(),
+                        'column': col['name']
+                    }
+
+        self._save_metadata()
+        return f"Tabla '{table_name}' creada exitosamente"
+
+    def create_table_from_file(self, command_data):
+        table_name = command_data['table_name']
+        table_name_key = table_name.lower()
+        file_path = command_data['file_path']
+        index_info_raw = command_data.get('index_info')
+
+        if table_name_key in self.tables_metadata:
+            return f"Error: la tabla '{table_name}' ya existe"
+
+        if not os.path.exists(file_path):
+            return f"Error: archivo no encontrado en '{file_path}'"
+
         try:
-            parsed_command = self._parser.parse(query)
-            if not parsed_command:
-                return "Error: no se pudo procesar la consulta (comando nulo)"
-
-            command = parsed_command.get('command')
-            raw_table_name = parsed_command.get('table_name')
-            table_name_key = raw_table_name.lower() if raw_table_name else None
-
-            if command == 'CREATE_TABLE':
-                if table_name_key in self._tables:
-                    return f"Error: tabla '{raw_table_name}' ya existe"
-                columns = parsed_command.get('columns')
-                self._tables[table_name_key] = {'columns': columns, 'rows': [], 'original_name': raw_table_name}
-                self._save_table_to_disk(table_name_key)
-                return f"tabla '{raw_table_name}' creada exitosamente"
-
-            elif command == 'CREATE_TABLE_FROM_FILE':
-                if table_name_key in self._tables:
-                    return f"Error: tabla '{raw_table_name}' ya existe"
-                file_path = parsed_command.get('file_path')
-                index_info = parsed_command.get('index_info')
-
-                if not os.path.exists(file_path):
-                    return f"Error: archivo no encontrado en '{file_path}'"
-
-                rows_data = []
-                inferred_columns = []
-                try:
-                    with open(file_path, 'r', newline='', encoding='utf-8') as csvfile:
-                        reader = csv.reader(csvfile)
-                        header = next(reader, None)
-                        if not header:
-                            return f"Error: archivo CSV '{file_path}' esta vacio o no tiene cabecera"
-
-                        inferred_columns = [{'name': h.strip(), 'type': 'TEXT', 'type_details': {}, 'constraints':[], 'index_info': None} for h in header]
-
-                        for row in reader:
-                            if len(row) == len(inferred_columns):
-                                row_dict = {inferred_columns[i]['name']: val for i, val in enumerate(row)}
-                                rows_data.append(row_dict)
-                            else:
-                                print(f"Warning: fila ignorada en '{file_path}' por numero incorrecto de columnas: {row}")
-
-
-                    self._tables[table_name_key] = {'columns': inferred_columns, 'rows': rows_data, 'original_name': raw_table_name}
-                    self._save_table_to_disk(table_name_key)
-                    return f"tabla '{raw_table_name}' creada desde '{file_path}' con {len(rows_data)} filas"
-                except FileNotFoundError:
-                    return f"Error: archivo no encontrado en '{file_path}'"
-                except csv.Error as csv_err:
-                    return f"error leyendo archivo CSV '{file_path}': {csv_err}"
-                except Exception as e:
-                    if table_name_key in self._tables:
-                        del self._tables[table_name_key]
-                    return f"error procesando archivo '{file_path}': {e}"
-
-            elif command == 'DROP_TABLE':
-                if table_name_key not in self._tables:
-                    return f"Error: tabla '{raw_table_name}' no existe"
-                del self._tables[table_name_key]
-                self._delete_table_file(table_name_key)
-                return f"tabla '{raw_table_name}' eliminada exitosamente"
-
-            if table_name_key not in self._tables:
-                return f"Error: tabla '{raw_table_name}' no existe"
-
-            table_data = self._tables[table_name_key]
-            table_schema = table_data['columns']
-
-            if command == 'INSERT':
-                values_to_insert = parsed_command.get('values')
-                target_columns_names = parsed_command.get('columns')
-                row_data = {}
-
-                if target_columns_names:
-                    if len(target_columns_names) != len(values_to_insert):
-                        return f"Error: discrepancia columnas/valores ({len(target_columns_names)} vs {len(values_to_insert)})"
-                    temp_row_data = {}
-                    for i, col_name_req in enumerate(target_columns_names):
-                        col_def = self._get_col_def(table_schema, col_name_req)
-                        if not col_def:
-                            return f"Error: columna '{col_name_req}' no existe"
-                        val_str = values_to_insert[i]
-                        casted_val = self._cast_value_for_comparison(val_str, col_def['type'])
-
-                        if col_def['type'].upper() == 'VARCHAR' and 'size' in col_def.get('type_details', {}):
-                            if isinstance(casted_val, str) and len(casted_val) > col_def['type_details']['size']:
-                                return f"Error: valor para columna '{col_def['name']}' excede el tamaño maximo de VARCHAR({col_def['type_details']['size']})"
-                        temp_row_data[col_def['name']] = casted_val
-                    for schema_col in table_schema:
-                        row_data[schema_col['name']] = temp_row_data.get(schema_col['name'])
-                else:
-                    if len(values_to_insert) != len(table_schema):
-                        return f"Error: tabla tiene {len(table_schema)} columnas, se dieron {len(values_to_insert)} valores"
-                    for i, col_def in enumerate(table_schema):
-                        val_str = values_to_insert[i]
-                        casted_val = self._cast_value_for_comparison(val_str, col_def['type'])
-                        if col_def['type'].upper() == 'VARCHAR' and 'size' in col_def.get('type_details', {}):
-                            if isinstance(casted_val, str) and len(casted_val) > col_def['type_details']['size']:
-                                return f"Error: valor para columna '{col_def['name']}' excede el tamaño maximo de VARCHAR({col_def['type_details']['size']})"
-                        row_data[col_def['name']] = casted_val
-
-                pk_col_def = next((col for col in table_schema if "PRIMARY KEY" in [c.upper() for c in col.get('constraints', [])]), None)
-                if pk_col_def:
-                    pk_name = pk_col_def['name']
-                    pk_value = row_data.get(pk_name)
-                    if pk_value is not None and any(r.get(pk_name) == pk_value for r in table_data['rows']):
-                        return f"Error: PRIMARY KEY constraint violada para '{pk_name}' = '{pk_value}'"
-
-                table_data['rows'].append(row_data)
-                self._save_table_to_disk(table_name_key)
-                return "1 fila insertada"
-
-            elif command == 'SELECT':
-                select_columns_names = parsed_command.get('select_columns')
-                where_clause_tree = parsed_command.get('where_clause')
-                result_rows = []
-                for row in table_data['rows']:
-                    if self._evaluate_expression_tree(row, where_clause_tree, table_schema):
-                        if select_columns_names == ['*']:
-                            result_rows.append(row.copy())
-                        else:
-                            projected_row = {}
-                            for col_name_req in select_columns_names:
-                                original_col_def = self._get_col_def(table_schema, col_name_req)
-                                if original_col_def and original_col_def['name'] in row:
-                                    projected_row[original_col_def['name']] = row[original_col_def['name']]
-                                else:
-                                    return f"Error: columna '{col_name_req}' no encontrada"
-                            result_rows.append(projected_row)
-                return result_rows
-
-            elif command == 'DELETE':
-                where_clause_tree = parsed_command.get('where_clause')
-                rows_to_keep = []
-                deleted_count = 0
-                for row in table_data['rows']:
-                    if self._evaluate_expression_tree(row, where_clause_tree, table_schema):
-                        deleted_count += 1
-                    else:
-                        rows_to_keep.append(row)
-
-                if deleted_count > 0:
-                    table_data['rows'] = rows_to_keep
-                    self._save_table_to_disk(table_name_key)
-                return f"{deleted_count} fila(s) eliminada(s)"
-
-            else:
-                return f"Error: comando '{command}' no reconocido o aun no implementado"
-
-        except SyntaxError as se:
-            return f"Error de Sintaxis: {se}"
-        except FileNotFoundError as fnf:
-            return f"Error de Archivo: {fnf}"
-        except KeyError as ke:
-            return f"Error de Clave/Columna: {ke}"
-        except ValueError as ve:
-            return f"Error de Valor/Tipo: {ve}"
+            with open(file_path, 'r', newline='', encoding='utf-8-sig') as csvfile:
+                reader = csv.reader(csvfile)
+                header = next(reader, None)
+                if not header:
+                    return f"Error: archivo CSV '{file_path}' esta vacio o no tiene cabecera"
+                records = [dict(zip(header, row)) for row in reader]
         except Exception as e:
-            return f"Error inesperado durante la ejecucion: {e}"
+            return f"Error leyendo el archivo CSV '{file_path}': {e}"
+
+        inferred_columns = [{'name': h.strip(), 'type': 'TEXT', 'type_details': {}, 'constraints':[], 'index_info': None} for h in header]
+
+        self.tables_metadata[table_name_key] = {'original_name': table_name, 'columns': inferred_columns, 'indexes': {}}
+
+        if index_info_raw and index_info_raw.get('column'):
+            index_col = index_info_raw['column']
+            index_type = index_info_raw['type'].lower()
+
+            if index_col not in header:
+                del self.tables_metadata[table_name_key]
+                return f"Error: la columna de indice '{index_col}' no se encuentra en la cabecera del CSV"
+
+            for col_meta in self.tables_metadata[table_name_key]['columns']:
+                if col_meta['name'] == index_col:
+                    col_meta['index_info'] = {'type': index_type}
+                    break
+            self.tables_metadata[table_name_key]['indexes'][index_col] = {'type': index_type, 'column': index_col}
+
+            index_instance = self._get_index_instance(table_name, {'type': index_type, 'column': index_col})
+
+            if index_type == 'isam' and isinstance(index_instance, ISAMFile):
+                try:
+                    sorted_records_tuples = sorted([(rec.get(index_col), rec) for rec in records], key=lambda x: x[0])
+                    index_instance.bulk_load(sorted_records_tuples)
+                    self._save_metadata()
+                    return f"Tabla '{table_name}' creada desde '{file_path}' con {len(records)} filas usando ISAM Bulk Load"
+                except Exception as e:
+                    self.drop_table(table_name)
+                    return f"Error durante el bulk load de ISAM: {e}"
+            else:
+                for record in records:
+                    key = record.get(index_col)
+                    if key is not None:
+                        pos = index_instance._append_to_data_file(record)
+                        index_instance.insert(key, pos)
+                self._save_metadata()
+                return f"Tabla '{table_name}' creada desde '{file_path}' con {len(records)} filas y indice '{index_type}'"
+        else:
+            data_file_path = os.path.join(self.db_directory, f"{table_name_key}.jsonl")
+            with open(data_file_path, "w", encoding="utf-8") as f:
+                for record in records:
+                    f.write(json.dumps(record) + "\n")
+            self._save_metadata()
+            return f"Tabla '{table_name}' creada desde '{file_path}' con {len(records)} filas (sin indice)"
+
+    def insert_into(self, command_data):
+        table_name = command_data['table_name']
+        table_name_key = table_name.lower()
+
+        if table_name_key not in self.tables_metadata:
+            return f"Error: la tabla '{table_name}' no existe"
+
+        meta = self.tables_metadata[table_name_key]
+        values = command_data['values']
+        row_dict = {}
+        for i, col_def in enumerate(meta['columns']):
+            row_dict[col_def['name']] = values[i]
+
+        if not meta['indexes']:
+            data_file_path = os.path.join(self.db_directory, f"{table_name_key}.jsonl")
+            with open(data_file_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(row_dict) + "\n")
+        else:
+            data_file_path = os.path.join(self.db_directory, f"{table_name_key}.jsonl")
+            pos = 0
+            with open(data_file_path, "a", encoding="utf-8") as f:
+                pos = f.tell()
+                f.write(json.dumps(row_dict) + "\n")
+
+            for index_col, index_info in meta['indexes'].items():
+                index_instance = self._get_index_instance(table_name, index_info)
+                if not index_instance:
+                    continue
+
+                key = row_dict.get(index_col)
+                if key is None:
+                    continue
+
+                if isinstance(index_instance, RTreeFile):
+                    try:
+                        coords = [float(c) for c in key.split(',')]
+                        item_box = Box(coords[0], coords[1], coords[2], coords[3], coords[4], coords[5])
+                        index_instance.insert(item_box, pos)
+                    except (ValueError, IndexError):
+                        return f"Error: valor para R-Tree en columna '{index_col}' no es valido"
+                else:
+                    index_instance.insert(key, pos)
+
+        return "1 fila insertada"
+
+    def select_from(self, command_data):
+        table_name = command_data['table_name']
+        table_name_key = table_name.lower()
+
+        if table_name_key not in self.tables_metadata:
+            return f"Error: la tabla '{table_name}' no existe"
+
+        meta = self.tables_metadata[table_name_key]
+        where_clause = command_data.get('where_clause')
+
+        if not where_clause:
+            data_file_path = os.path.join(self.db_directory, f"{table_name_key}.jsonl")
+            if not os.path.exists(data_file_path):
+                return []
+
+            results = []
+            with open(data_file_path, 'r', encoding="utf-8") as f:
+                for line in f:
+                    results.append(json.loads(line))
+            return results
+
+        if where_clause['type'] == 'condition':
+            col_to_search = where_clause['column']
+            if col_to_search in meta['indexes']:
+                index_info = meta['indexes'][col_to_search]
+                index_instance = self._get_index_instance(table_name, index_info)
+
+                search_key = where_clause['value']
+                record = index_instance.search(search_key)
+
+                return [record] if record else []
+
+        return "Error: busqueda compleja sin optimizador no implementada, se requiere un full-scan"
+
+    def delete_from(self, command_data):
+        table_name = command_data['table_name']
+        table_name_key = table_name.lower()
+        if table_name_key not in self.tables_metadata:
+            return f"Error: la tabla '{table_name}' no existe"
+        meta = self.tables_metadata[table_name_key]
+        where_clause = command_data.get('where_clause')
+
+        if where_clause and where_clause['type'] == 'condition':
+            col_to_delete = where_clause['column']
+            if col_to_delete in meta['indexes']:
+                index_info = meta['indexes'][col_to_delete]
+                index_instance = self._get_index_instance(table_name, index_info)
+                delete_key = where_clause['value']
+
+                if isinstance(index_instance, RTreeFile):
+                    return "DELETE en R-Tree necesita impl mas especifica (encontrar MBR y posicion)"
+
+                deleted = index_instance.delete(delete_key)
+                if deleted:
+                    return f"1 fila eliminada del indice, se recomienda compactar la tabla '{table_name}'"
+                else:
+                    return "No se encontro la fila para eliminar"
+
+        return "Error: DELETE solo soportado con condicion simple en columna indexada"
+
+    def drop_table(self, table_name):
+        table_name_key = table_name.lower()
+        if table_name_key not in self.tables_metadata:
+            return f"Error: la tabla '{table_name}' no existe"
+
+        meta = self.tables_metadata[table_name_key]
+
+        for index_col in meta['indexes']:
+            index_file_path = os.path.join(self.db_directory, f"{table_name_key}_{index_col}.idx")
+            if os.path.exists(index_file_path):
+                os.remove(index_file_path)
+            if meta['indexes'][index_col]['type'] == 'isam':
+                meta_file_path = os.path.join(self.db_directory, f"{table_name_key}_{index_col}_meta.pkl")
+                if os.path.exists(meta_file_path):
+                    os.remove(meta_file_path)
+
+        data_file_path = os.path.join(self.db_directory, f"{table_name_key}.jsonl")
+        if os.path.exists(data_file_path):
+            os.remove(data_file_path)
+
+        del self.tables_metadata[table_name_key]
+        del self.active_indexes[f"{table_name_key}_{index_col}"]
+        self._save_metadata()
+
+        return f"Tabla '{table_name}' eliminada"
