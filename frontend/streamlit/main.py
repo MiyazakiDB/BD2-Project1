@@ -1,22 +1,19 @@
+# main.py
 import streamlit as st
 import pandas as pd
-import sqlite3
-import io
-import os
-import json
 from datetime import datetime
-from typing import Dict, List, Any, Optional
-import tempfile
+from auth_handler import AuthHandler
+from api_client import APIClient
 
 # Configuración de la página
 st.set_page_config(
-    page_title="SQL Parser Console",
+    page_title="Miyazaki DB - Smart Stock",
     page_icon="🗄️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS personalizados
+# CSS personalizado (mantén tus estilos existentes)
 st.markdown("""
 <style>
     .main-header {
@@ -27,259 +24,211 @@ st.markdown("""
         text-align: center;
         margin-bottom: 2rem;
     }
-    .query-console {
+    .auth-container {
+        max-width: 400px;
+        margin: 0 auto;
+        padding: 2rem;
+        border: 1px solid #dee2e6;
+        border-radius: 10px;
         background-color: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 1rem 0;
     }
-    .file-info {
-        background-color: #e7f3ff;
-        border-left: 4px solid #007bff;
-        padding: 10px;
-        margin: 10px 0;
-        border-radius: 4px;
-    }
-    .success-box {
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        color: #155724;
-        padding: 10px;
-        border-radius: 4px;
-        margin: 10px 0;
-    }
-    .error-box {
-        background-color: #f8d7da;
-        border: 1px solid #f5c6cb;
-        color: #721c24;
-        padding: 10px;
-        border-radius: 4px;
-        margin: 10px 0;
-    }
-    .stDataFrame {
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
-    }
+    /* ... resto de tus estilos ... */
 </style>
 """, unsafe_allow_html=True)
 
 
-class SQLParserFrontend:
+class MiyazakiDBApp:
     def __init__(self):
-        # Inicializar estado de la sesión
-        if 'uploaded_files' not in st.session_state:
-            st.session_state.uploaded_files = {}
+        # Inicializar handlers
+        self.auth = AuthHandler()
+        self.api = APIClient(auth_handler=self.auth)
+
+        # Inicializar session state
         if 'query_history' not in st.session_state:
             st.session_state.query_history = []
-        if 'current_table' not in st.session_state:
-            st.session_state.current_table = None
-        if 'db_connection' not in st.session_state:
-            st.session_state.db_connection = None
+        if 'current_tables' not in st.session_state:
+            st.session_state.current_tables = []
 
-    def setup_database(self):
-        """Configurar base de datos en memoria"""
-        if st.session_state.db_connection is None:
-            st.session_state.db_connection = sqlite3.connect(':memory:', check_same_thread=False)
-
-    def load_file_to_db(self, file, file_name: str, data_type: str):
-        """Cargar archivo a la base de datos"""
-        try:
-            # Determinar el tipo de archivo y leer datos
-            if file_name.endswith('.csv'):
-                df = pd.read_csv(file)
-            elif file_name.endswith(('.xlsx', '.xls')):
-                df = pd.read_excel(file)
-            elif file_name.endswith('.json'):
-                df = pd.read_json(file)
-            else:
-                st.error(f"Formato de archivo no soportado: {file_name}")
-                return False
-
-            # Crear nombre de tabla basado en el nombre del archivo
-            table_name = os.path.splitext(file_name)[0].replace(' ', '_').replace('-', '_')
-
-            # Cargar datos a SQLite
-            df.to_sql(table_name, st.session_state.db_connection, if_exists='replace', index=False)
-
-            # Guardar información del archivo
-            st.session_state.uploaded_files[file_name] = {
-                'table_name': table_name,
-                'data_type': data_type,
-                'rows': len(df),
-                'columns': list(df.columns),
-                'upload_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'dataframe': df
-            }
-
-            return True
-
-        except Exception as e:
-            st.error(f"Error al cargar archivo {file_name}: {str(e)}")
-            return False
-
-    def execute_query(self, query: str):
-        """Ejecutar query SQL"""
-        try:
-            if st.session_state.db_connection is None:
-                st.error("No hay conexión a la base de datos")
-                return None
-
-            # Ejecutar query
-            result = pd.read_sql_query(query, st.session_state.db_connection)
-
-            # Agregar a historial
-            st.session_state.query_history.append({
-                'query': query,
-                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'rows_returned': len(result)
-            })
-
-            return result
-
-        except Exception as e:
-            st.error(f"Error ejecutando query: {str(e)}")
-            return None
-
-    def export_data(self, data: pd.DataFrame, format_type: str, filename: str):
-        """Exportar datos en formato especificado"""
-        try:
-            if format_type == 'CSV':
-                csv_buffer = io.StringIO()
-                data.to_csv(csv_buffer, index=False)
-                return csv_buffer.getvalue(), 'text/csv'
-
-            elif format_type == 'TXT':
-                txt_buffer = io.StringIO()
-                data.to_string(txt_buffer, index=False)
-                return txt_buffer.getvalue(), 'text/plain'
-
-            else:
-                st.error("Formato de exportación no soportado")
-                return None, None
-
-        except Exception as e:
-            st.error(f"Error al exportar: {str(e)}")
-            return None, None
-
-    def render_header(self):
-        """Renderizar encabezado principal"""
+    def render_auth_screen(self):
+        """Pantalla de autenticación"""
         st.markdown("""
         <div class="main-header">
-            <h1>🗄️ SQL Parser Console</h1>
-            <p>Consola avanzada para análisis de datos con SQL personalizado</p>
+            <h1>🗄️ Miyazaki DB</h1>
+            <p>Sistema Inteligente de Gestión de Stock</p>
         </div>
         """, unsafe_allow_html=True)
 
+        # Tabs para Login y Registro
+        tab1, tab2 = st.tabs(["🔑 Iniciar Sesión", "📝 Registrarse"])
+
+        with tab1:
+            st.markdown('<div class="auth-container">', unsafe_allow_html=True)
+            st.subheader("Iniciar Sesión")
+
+            with st.form("login_form"):
+                email = st.text_input("Email", placeholder="tu@email.com")
+                password = st.text_input("Contraseña", type="password")
+
+                if st.form_submit_button("🔑 Ingresar", type="primary"):
+                    if email and password:
+                        user_data = self.auth.login_user(email, password)
+                        if user_data:
+                            st.success(f"¡Bienvenido {user_data['user']['name']}!")
+                            st.rerun()
+                    else:
+                        st.warning("Por favor completa todos los campos")
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        with tab2:
+            st.markdown('<div class="auth-container">', unsafe_allow_html=True)
+            st.subheader("Crear Cuenta")
+
+            with st.form("register_form"):
+                name = st.text_input("Nombre completo")
+                email = st.text_input("Email", placeholder="tu@email.com")
+                password = st.text_input("Contraseña", type="password")
+                confirm_password = st.text_input("Confirmar contraseña", type="password")
+
+                if st.form_submit_button("📝 Registrarse", type="primary"):
+                    if name and email and password and confirm_password:
+                        if password == confirm_password:
+                            if self.auth.register_user(name, email, password):
+                                st.info("Ahora puedes iniciar sesión")
+                        else:
+                            st.error("Las contraseñas no coinciden")
+                    else:
+                        st.warning("Por favor completa todos los campos")
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    def render_header(self):
+        """Header para usuarios autenticados"""
+        col1, col2, col3 = st.columns([2, 1, 1])
+
+        with col1:
+            st.markdown("""
+            <div class="main-header">
+                <h1>🗄️ Miyazaki DB - Smart Stock</h1>
+                <p>Consola avanzada para análisis de datos</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col2:
+            user_name = st.session_state.get("user_info", {}).get("name", "Usuario")
+            st.info(f"👤 {user_name}")
+
+        with col3:
+            if st.button("🚪 Cerrar Sesión"):
+                self.auth.logout()
+
     def render_sidebar(self):
-        """Renderizar barra lateral con gestión de archivos"""
+        """Sidebar mejorado para backend"""
         st.sidebar.header("📁 Gestión de Archivos")
 
-        # Sección de subida de archivos
-        st.sidebar.subheader("Subir Nuevos Archivos")
+        # Actualizar lista de tablas
+        if st.sidebar.button("🔄 Actualizar Tablas"):
+            st.session_state.current_tables = self.api.get_tables()
 
-        uploaded_files = st.sidebar.file_uploader(
-            "Seleccionar archivos",
-            type=['csv', 'xlsx', 'xls', 'json'],
-            accept_multiple_files=True,
-            help="Formatos soportados: CSV, Excel, JSON"
+        # Subir nuevo archivo
+        st.sidebar.subheader("📤 Subir Archivo")
+
+        uploaded_file = st.sidebar.file_uploader(
+            "Seleccionar archivo",
+            type=['csv', 'txt'],
+            help="Formatos soportados: CSV, TXT"
         )
 
-        # Tipo de datos
-        data_type = st.sidebar.selectbox(
-            "Tipo de datos:",
-            ["Estándar", "Espacial", "Temporal", "Geográfico"],
-            help="Especifica el tipo de datos para optimizar el procesamiento"
-        )
+        if uploaded_file:
+            with st.sidebar.form("upload_form"):
+                table_name = st.text_input("Nombre de tabla", value=uploaded_file.name.split('.')[0])
+                delimiter = st.selectbox("Delimitador", [",", ";", "\t", "|", ":"])
+                encoding = st.text_input("Codificación", value="utf-8")
 
-        # Procesar archivos subidos
-        if uploaded_files:
-            if st.sidebar.button("🔄 Cargar Archivos"):
-                success_count = 0
-                for uploaded_file in uploaded_files:
-                    if self.load_file_to_db(uploaded_file, uploaded_file.name, data_type):
-                        success_count += 1
+                col1, col2 = st.columns(2)
+                with col1:
+                    index_type = st.selectbox("Tipo de índice", ["", "BTree", "Hash", "RTree"])
+                with col2:
+                    index_column = st.text_input("Columna índice")
 
-                if success_count > 0:
-                    st.sidebar.success(f"✅ {success_count} archivo(s) cargado(s) exitosamente")
-                    st.rerun()
+                has_header = st.checkbox("¿Tiene cabecera?", value=True)
 
-        # Lista de archivos cargados
-        st.sidebar.subheader("📋 Archivos Cargados")
-
-        if st.session_state.uploaded_files:
-            for filename, info in st.session_state.uploaded_files.items():
-                with st.sidebar.expander(f"📄 {filename}"):
-                    st.write(f"**Tabla:** {info['table_name']}")
-                    st.write(f"**Tipo:** {info['data_type']}")
-                    st.write(f"**Filas:** {info['rows']:,}")
-                    st.write(f"**Columnas:** {len(info['columns'])}")
-                    st.write(f"**Subido:** {info['upload_time']}")
-
-                    if st.button(f"👁️ Ver {filename}", key=f"view_{filename}"):
-                        st.session_state.current_table = info['table_name']
-
-                    if st.button(f"🗑️ Eliminar {filename}", key=f"delete_{filename}"):
-                        del st.session_state.uploaded_files[filename]
+                if st.form_submit_button("📤 Subir y Crear Tabla"):
+                    success = self.api.upload_file_and_create_table(
+                        uploaded_file, table_name,
+                        delimiter=delimiter, encoding=encoding,
+                        index_type=index_type, index_column=index_column,
+                        has_header=has_header
+                    )
+                    if success:
+                        st.session_state.current_tables = self.api.get_tables()
                         st.rerun()
-        else:
-            st.sidebar.info("No hay archivos cargados")
 
-        # Información de la base de datos
-        st.sidebar.subheader("🔗 Estado de la Base de Datos")
-        if st.session_state.uploaded_files:
-            total_tables = len(st.session_state.uploaded_files)
-            total_rows = sum(info['rows'] for info in st.session_state.uploaded_files.values())
-            st.sidebar.metric("Tablas cargadas", total_tables)
-            st.sidebar.metric("Total de filas", f"{total_rows:,}")
+        # Lista de tablas
+        st.sidebar.subheader("📋 Tablas Disponibles")
+
+        if not hasattr(st.session_state, 'current_tables') or not st.session_state.current_tables:
+            st.session_state.current_tables = self.api.get_tables()
+
+        for table in st.session_state.current_tables:
+            with st.sidebar.expander(f"📄 {table['name']}"):
+                st.write(f"**Filas:** {table['row_count']:,}")
+                st.write(f"**Columnas:** {table['columns']}")
+
+                if st.button(f"👁️ Ver esquema", key=f"schema_{table['name']}"):
+                    query = f"DESCRIBE {table['name']};"
+                    result = self.api.execute_query(query)
+                    if result is not None:
+                        st.session_state.last_result = result
 
     def render_query_console(self):
-        """Renderizar consola de queries"""
+        """Consola de queries conectada al backend"""
         st.header("💻 Consola de Queries")
 
-        # Área de query
         col1, col2 = st.columns([3, 1])
 
         with col1:
             query = st.text_area(
                 "Escribir consulta SQL:",
                 height=150,
-                placeholder="SELECT * FROM tabla_ejemplo WHERE columna = 'valor';",
+                placeholder="SELECT * FROM tu_tabla WHERE columna = 'valor';",
                 help="Escribe tu consulta SQL personalizada aquí"
             )
 
         with col2:
             st.subheader("🔧 Herramientas")
 
-            # Botones de acción
+            # Formato de respuesta
+            response_format = st.selectbox("Formato:", ["JSON", "CSV"])
+
             if st.button("▶️ Ejecutar Query", type="primary"):
                 if query.strip():
                     with st.spinner("Ejecutando consulta..."):
-                        result = self.execute_query(query)
+                        format_type = "csv" if response_format == "CSV" else "json"
+                        result = self.api.execute_query(query, format_type)
                         if result is not None:
                             st.session_state.last_result = result
+                            # Agregar al historial
+                            st.session_state.query_history.append({
+                                'query': query,
+                                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                'rows_returned': len(result)
+                            })
                 else:
                     st.warning("Ingresa una consulta SQL")
 
-            # Queries de ejemplo
-            if st.button("📝 Query de Ejemplo"):
-                if st.session_state.uploaded_files:
-                    first_table = list(st.session_state.uploaded_files.values())[0]['table_name']
-                    example_query = f"SELECT * FROM {first_table} LIMIT 10;"
-                    st.text_area("Query de ejemplo:", value=example_query, key="example_query")
-                else:
-                    st.info("Carga archivos primero")
-
             if st.button("🔄 Limpiar Consola"):
+                if 'last_result' in st.session_state:
+                    del st.session_state.last_result
                 st.rerun()
 
-        # Mostrar resultado de la última query
+        # Mostrar resultado
         if 'last_result' in st.session_state and st.session_state.last_result is not None:
             st.subheader("📊 Resultado de la Consulta")
 
             result_df = st.session_state.last_result
 
-            # Información del resultado
+            # Métricas
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Filas retornadas", len(result_df))
@@ -289,217 +238,52 @@ class SQLParserFrontend:
                 if not result_df.empty:
                     st.metric("Memoria (KB)", f"{result_df.memory_usage(deep=True).sum() / 1024:.1f}")
 
-            # Mostrar tabla
+            # Tabla de resultados
             st.dataframe(result_df, use_container_width=True, height=400)
 
-            # Opciones de exportación
-            st.subheader("📤 Exportar Resultado")
-            col1, col2, col3 = st.columns([2, 2, 1])
-
-            with col1:
-                export_format = st.selectbox("Formato:", ["CSV", "TXT"])
-
-            with col2:
-                export_filename = st.text_input("Nombre del archivo:", "resultado_query")
-
-            with col3:
-                if st.button("💾 Exportar"):
-                    if export_filename:
-                        data, mime_type = self.export_data(result_df, export_format, export_filename)
-                        if data:
-                            file_extension = 'csv' if export_format == 'CSV' else 'txt'
-                            st.download_button(
-                                label=f"⬇️ Descargar {export_format}",
-                                data=data,
-                                file_name=f"{export_filename}.{file_extension}",
-                                mime=mime_type
-                            )
-                    else:
-                        st.warning("Ingresa un nombre para el archivo")
-
-    def render_table_viewer(self):
-        """Renderizar visualizador de tablas"""
-        st.header("🗂️ Visualizador de Tablas")
-
-        if not st.session_state.uploaded_files:
-            st.info("🔍 No hay tablas disponibles. Sube archivos para comenzar.")
-            return
-
-        # Selector de tabla
-        table_options = {info['table_name']: filename
-                         for filename, info in st.session_state.uploaded_files.items()}
-
-        selected_table = st.selectbox(
-            "Seleccionar tabla:",
-            options=list(table_options.keys()),
-            format_func=lambda x: f"{table_options[x]} ({x})"
-        )
-
-        if selected_table:
-            # Obtener información de la tabla
-            table_info = None
-            for filename, info in st.session_state.uploaded_files.items():
-                if info['table_name'] == selected_table:
-                    table_info = info
-                    break
-
-            if table_info:
-                # Información de la tabla
-                st.markdown(f"""
-                <div class="file-info">
-                    <h4>📊 {table_options[selected_table]}</h4>
-                    <p><strong>Tabla:</strong> {selected_table} | 
-                       <strong>Tipo:</strong> {table_info['data_type']} | 
-                       <strong>Filas:</strong> {table_info['rows']:,} | 
-                       <strong>Columnas:</strong> {len(table_info['columns'])}</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # Pestañas para diferentes vistas
-                tab1, tab2, tab3, tab4 = st.tabs(["📋 Datos", "📈 Estadísticas", "🔍 Esquema", "🔧 Acciones"])
-
-                with tab1:
-                    # Vista de datos con paginación
-                    df = table_info['dataframe']
-
-                    col1, col2, col3 = st.columns([1, 1, 2])
-                    with col1:
-                        rows_per_page = st.selectbox("Filas por página:", [10, 25, 50, 100], index=1)
-                    with col2:
-                        total_pages = max(1, (len(df) - 1) // rows_per_page + 1)
-                        page = st.number_input("Página:", min_value=1, max_value=total_pages, value=1)
-                    with col3:
-                        st.write(f"Mostrando página {page} de {total_pages}")
-
-                    # Mostrar datos paginados
-                    start_idx = (page - 1) * rows_per_page
-                    end_idx = start_idx + rows_per_page
-                    st.dataframe(df.iloc[start_idx:end_idx], use_container_width=True)
-
-                with tab2:
-                    # Estadísticas descriptivas
-                    st.subheader("📊 Estadísticas Descriptivas")
-
-                    # Solo para columnas numéricas
-                    numeric_cols = df.select_dtypes(include=['number']).columns
-                    if len(numeric_cols) > 0:
-                        st.dataframe(df[numeric_cols].describe(), use_container_width=True)
-                    else:
-                        st.info("No hay columnas numéricas para mostrar estadísticas")
-
-                    # Información general
-                    st.subheader("ℹ️ Información General")
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        st.write("**Tipos de datos:**")
-                        dtype_counts = df.dtypes.value_counts()
-                        for dtype, count in dtype_counts.items():
-                            st.write(f"- {dtype}: {count} columnas")
-
-                    with col2:
-                        st.write("**Valores nulos:**")
-                        null_counts = df.isnull().sum()
-                        null_cols = null_counts[null_counts > 0]
-                        if len(null_cols) > 0:
-                            for col, count in null_cols.items():
-                                st.write(f"- {col}: {count} nulos")
-                        else:
-                            st.write("No hay valores nulos")
-
-                with tab3:
-                    # Esquema de la tabla
-                    st.subheader("🗂️ Esquema de la Tabla")
-
-                    schema_data = []
-                    for col in df.columns:
-                        schema_data.append({
-                            'Columna': col,
-                            'Tipo': str(df[col].dtype),
-                            'Nulos': df[col].isnull().sum(),
-                            'Únicos': df[col].nunique(),
-                            'Ejemplo': str(df[col].iloc[0]) if len(df) > 0 else 'N/A'
-                        })
-
-                    schema_df = pd.DataFrame(schema_data)
-                    st.dataframe(schema_df, use_container_width=True)
-
-                with tab4:
-                    # Acciones disponibles
-                    st.subheader("🔧 Acciones Disponibles")
-
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        if st.button(f"📤 Exportar {selected_table}"):
-                            export_format = st.selectbox("Formato de exportación:", ["CSV", "TXT"],
-                                                         key="export_format_table")
-                            data, mime_type = self.export_data(df, export_format, selected_table)
-                            if data:
-                                file_extension = 'csv' if export_format == 'CSV' else 'txt'
-                                st.download_button(
-                                    label=f"⬇️ Descargar {export_format}",
-                                    data=data,
-                                    file_name=f"{selected_table}.{file_extension}",
-                                    mime=mime_type,
-                                    key="download_table"
-                                )
-
-                    with col2:
-                        if st.button(f"🔍 Query Automática"):
-                            auto_query = f"SELECT * FROM {selected_table} LIMIT 100;"
-                            st.code(auto_query, language='sql')
-
-                            if st.button("▶️ Ejecutar Query Automática"):
-                                result = self.execute_query(auto_query)
-                                if result is not None:
-                                    st.session_state.last_result = result
-                                    st.success("Query ejecutada. Ve a la consola para ver resultados.")
-
-    def render_query_history(self):
-        """Renderizar historial de queries"""
-        if st.session_state.query_history:
-            st.header("📝 Historial de Consultas")
-
-            for i, query_info in enumerate(reversed(st.session_state.query_history[-10:])):  # Últimas 10
-                with st.expander(f"Query {len(st.session_state.query_history) - i} - {query_info['timestamp']}"):
-                    st.code(query_info['query'], language='sql')
-                    st.write(f"**Filas retornadas:** {query_info['rows_returned']}")
-
-                    if st.button(f"🔄 Re-ejecutar", key=f"rerun_{i}"):
-                        result = self.execute_query(query_info['query'])
-                        if result is not None:
-                            st.session_state.last_result = result
+            # Exportación
+            if not result_df.empty:
+                csv = result_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Descargar CSV",
+                    data=csv,
+                    file_name=f"resultado_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
 
     def run(self):
-        """Ejecutar la aplicación principal"""
-        self.setup_database()
+        """Ejecutar aplicación principal"""
+        # Verificar autenticación
+        if not self.auth.is_authenticated():
+            self.render_auth_screen()
+            return
+
+        # Aplicación principal para usuarios autenticados
         self.render_header()
         self.render_sidebar()
 
-        # Pestañas principales
-        tab1, tab2, tab3 = st.tabs(["💻 Consola SQL", "🗂️ Tablas", "📝 Historial"])
+        # Tabs principales
+        tab1, tab2, tab3 = st.tabs(["💻 Consola SQL", "📊 Tablas", "📝 Historial"])
 
         with tab1:
             self.render_query_console()
 
         with tab2:
-            self.render_table_viewer()
+            # Implementa visualizador de tablas usando API
+            st.header("🗂️ Visualizador de Tablas")
+            st.info("Implementar visualizador conectado al backend")
 
         with tab3:
-            self.render_query_history()
-
-        # Footer
-        st.markdown("---")
-        st.markdown(
-            "<div style='text-align: center; color: gray;'>"
-            "🗄️ SQL Parser Console - Desarrollado con Streamlit"
-            "</div>",
-            unsafe_allow_html=True
-        )
+            # Historial de queries
+            if st.session_state.query_history:
+                st.header("📝 Historial de Consultas")
+                for i, query_info in enumerate(reversed(st.session_state.query_history[-10:])):
+                    with st.expander(f"Query {len(st.session_state.query_history) - i} - {query_info['timestamp']}"):
+                        st.code(query_info['query'], language='sql')
+                        st.write(f"**Filas retornadas:** {query_info['rows_returned']}")
 
 
-# Ejecutar la aplicación
+# Ejecutar aplicación
 if __name__ == "__main__":
-    app = SQLParserFrontend()
+    app = MiyazakiDBApp()
     app.run()
