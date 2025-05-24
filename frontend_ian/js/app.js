@@ -24,7 +24,7 @@ function checkAuthStatus() {
     
     if (authToken) {
         // Make API call to verify token and get user info
-        fetch(`${API_BASE_URL}/users/me`, {
+        fetch(`${API_BASE_URL}/auth/me`, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${authToken}`,
@@ -78,7 +78,7 @@ function login(username, password) {
     
     if (loginStatus) loginStatus.innerHTML = '<div class="loader"></div> Authenticating...';
     
-    fetch(`${API_BASE_URL}/auth/token`, {
+    fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -477,6 +477,45 @@ function setupTableForm() {
     });
 }
 
+// Registration function
+function register(username, email, password) {
+    const registerStatus = document.getElementById('register-status');
+    
+    if (registerStatus) registerStatus.innerHTML = '<div class="loader"></div> Creating account...';
+    
+    fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            username: username,
+            email: email,
+            password: password
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Registration failed: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (registerStatus) {
+            registerStatus.innerHTML = '<span class="status-ok">Account created successfully! Please login.</span>';
+            // Clear form
+            document.getElementById('register-form').reset();
+        }
+    })
+    .catch(error => {
+        console.error('Registration error:', error);
+        if (registerStatus) {
+            registerStatus.innerHTML = `<span class="status-error">Registration failed: ${error.message}</span>`;
+        }
+    });
+}
+
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
     setActiveNavLink();
@@ -518,6 +557,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     const username = document.getElementById('username').value;
                     const password = document.getElementById('password').value;
                     login(username, password);
+                });
+            }
+            
+            // Handle register form if it exists
+            const registerForm = document.getElementById('register-form');
+            if (registerForm) {
+                registerForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const username = document.getElementById('reg-username').value;
+                    const email = document.getElementById('reg-email').value;
+                    const password = document.getElementById('reg-password').value;
+                    register(username, email, password);
                 });
             }
             break;
