@@ -1,6 +1,8 @@
 import sys
 import os
 import csv
+
+import uvicorn
 from fastapi import FastAPI, HTTPException, status, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from typing import Any, Optional
@@ -62,6 +64,9 @@ async def execute_sql_query(request_body: SQLQueryRequest) -> Any:
     except Exception as e:
         print(f"Error inesperado en la API para la query '{query_string}': {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Un error inesperado ocurrio: {str(e)}")
+
+
+
 
 
 # uvicorn python-multipart chardet
@@ -132,3 +137,10 @@ async def upload_file(
 @app.get("/", summary="Endpoint para uptime")
 async def read_root():
     return {"message": "MiyazakiDB API is up!"}
+
+if __name__ == "__main__":
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000
+    )
