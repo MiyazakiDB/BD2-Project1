@@ -17,7 +17,7 @@ class FileInDB(FileCreate):
     created_at: datetime = Field(default_factory=datetime.now)
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class File(FileBase):
     id: UUID

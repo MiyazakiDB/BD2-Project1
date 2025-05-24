@@ -4,7 +4,7 @@ from jose import JWTError, jwt
 from uuid import UUID, uuid4
 
 from backend.models.user import User, UserCreate, Token, TokenPayload
-from backend.core.auth.jwt import get_password_hash, verify_password, create_tokens, get_current_user
+from backend.core.auth.jwt import get_password_hash, verify_password, create_tokens, get_current_user, oauth2_scheme
 from backend.settings import SECRET_KEY, ALGORITHM
 
 router = APIRouter()

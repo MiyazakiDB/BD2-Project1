@@ -16,7 +16,7 @@ class User(UserBase):
     role: str = "user"
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UserInDB(User):
     hashed_password: str

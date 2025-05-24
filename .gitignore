@@ -68,3 +68,6 @@ uploads/*
 *.pem
 .env
 .env.*
+
+# frontend prueba
+.frontend_ian/

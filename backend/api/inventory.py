@@ -90,7 +90,7 @@ async def create_table_from_file(
     index_column: str = Body(None),
     current_user: User = Depends(get_current_user)
 ):
-    # Get file metadata
+    # Metada del archivo
     metadata = file_store.get_file_by_id(current_user.id, file_id)
     if not metadata:
         raise HTTPException(
@@ -98,7 +98,7 @@ async def create_table_from_file(
             detail="File not found"
         )
     
-    # Construct SQL query for creating table from file
+    # Construcción de la tbla a partir del archivo
     query = f"CREATE TABLE {table_name} FROM FILE '{metadata['path']}'"
     
     # Add index information if provided
