@@ -430,6 +430,7 @@ function setupTableForm() {
         const fileId = document.getElementById('file-id').value;
         const indexType = document.getElementById('index-type').value;
         const indexColumn = document.getElementById('index-column').value;
+        const encoding = document.getElementById('encoding') ? document.getElementById('encoding').value : null;
         const resultContainer = document.getElementById('create-result');
         
         showLoading('create-result', 'Creating table...');
@@ -442,6 +443,10 @@ function setupTableForm() {
         if (indexType && indexColumn) {
             payload.index_type = indexType;
             payload.index_column = indexColumn;
+        }
+        
+        if (encoding) {
+            payload.encoding = encoding;
         }
         
         fetch(`${API_BASE_URL}/inventory/create-table-from-file`, {

@@ -73,6 +73,19 @@
                         <label for="index-column">Index Column (optional):</label>
                         <input type="text" id="index-column" name="index_column" placeholder="Name of column to index">
                     </div>
+                    
+                    <div class="form-group">
+                        <label for="encoding">File Encoding (optional):</label>
+                        <select id="encoding" name="encoding">
+                            <option value="">Auto-detect</option>
+                            <option value="utf-8">UTF-8</option>
+                            <option value="latin1">Latin-1</option>
+                            <option value="cp1252">Windows-1252</option>
+                            <option value="ISO-8859-1">ISO-8859-1</option>
+                            <option value="ascii">ASCII</option>
+                        </select>
+                        <small>Select encoding if the file contains special characters</small>
+                    </div>
 
                     <div class="form-group">
                         <button type="submit" class="btn">
