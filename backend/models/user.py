@@ -28,5 +28,6 @@ class Token(BaseModel):
 
 class TokenPayload(BaseModel):
     sub: Optional[str] = None
-    exp: Optional[int] = None
+    exp: Optional[float] = None  # Changed from int to float to accept timestamp with decimals
     role: Optional[str] = None
+    type: Optional[str] = None  # Added to store token type (access or refresh)

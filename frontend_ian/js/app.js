@@ -381,16 +381,18 @@ function setupFileUpload() {
         
         showLoading('upload-status', 'Uploading file...');
         
-        fetch(`${API_BASE_URL}/files/upload`, {
+        fetch(`${API_BASE_URL}/files/`, {  // Changed from /files/upload to /files/
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${authToken}`
+                // Don't set Content-Type header when sending FormData
+                // The browser will set it automatically with the correct boundary
             },
             body: formData
         })
         .then(response => {
             if (!response.ok) {
-                throw new Error(`Upload failed: ${response.status}`);
+                throw new Error(`Upload failed: ${response.status} - ${response.statusText}`);
             }
             return response.json();
         })

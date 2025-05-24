@@ -88,6 +88,7 @@ async def create_table_from_file(
     file_id: UUID = Body(...),
     index_type: str = Body(None),
     index_column: str = Body(None),
+    encoding: str = Body(None),  # Added encoding parameter
     current_user: User = Depends(get_current_user)
 ):
     # Metada del archivo
@@ -98,15 +99,51 @@ async def create_table_from_file(
             detail="File not found"
         )
     
-    # Construcción de la tbla a partir del archivo
+    # Construcción de la tabla a partir del archivo
     query = f"CREATE TABLE {table_name} FROM FILE '{metadata['path']}'"
     
     # Add index information if provided
     if index_type and index_column:
         query += f" USING INDEX {index_type} ({index_column})"
+        
+    # Add encoding if provided
+    if encoding:
+        query += f" WITH ENCODING '{encoding}'"
     
     # Execute query
     db_manager = get_db_manager(current_user.id)
     result = db_manager.execute_query(query)
     
     return {"message": result}
+
+# Add this new endpoint to list tables
+
+@router.get("/tables")
+async def list_tables(current_user: User = Depends(get_current_user)):
+    """
+    List all tables in the user's database
+    """
+    try:
+        db_manager = get_db_manager(current_user.id)
+        
+        # Using a SELECT query to get table names from SQLite master
+        # Alternatively, you can implement a method in DatabaseManager to list tables
+        tables = []
+        
+        if hasattr(db_manager, '_tables'):
+            # If using our custom DatabaseManager that has a _tables dictionary
+            tables = [
+                {
+                    "name": table_data.get('original_name', name),
+                    "row_count": len(table_data.get('rows', [])),
+                    "columns": len(table_data.get('columns', [])),
+                }
+                for name, table_data in db_manager._tables.items()
+            ]
+        
+        return {"tables": tables}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving tables: {str(e)}"
+        )

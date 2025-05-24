@@ -16,19 +16,21 @@ class SQLParser:
         if query.endswith(';'):
             query = query[:-1].strip()
 
-        create_table_from_file_match = re.match(r"CREATE\s+TABLE\s+(\w+)\s+FROM\s+FILE\s+'([^']*)'(?:\s+USING\s+INDEX\s+(\w+)\s*\(([\w\"]+)\))?", query, re.IGNORECASE)
+        create_table_from_file_match = re.match(r"CREATE\s+TABLE\s+(\w+)\s+FROM\s+FILE\s+'([^']*)'(?:\s+USING\s+INDEX\s+(\w+)\s*\(([\w\"]+)\))?(?:\s+WITH\s+ENCODING\s+'([^']*)')?", query, re.IGNORECASE)
         if create_table_from_file_match:
             table_name = create_table_from_file_match.group(1)
             file_path = create_table_from_file_match.group(2)
             index_type = create_table_from_file_match.group(3)
             index_column = create_table_from_file_match.group(4)
+            encoding = create_table_from_file_match.group(5)
             if index_column:
                 index_column = index_column.strip('"')
             return {
                 'command': 'CREATE_TABLE_FROM_FILE',
                 'table_name': table_name,
                 'file_path': file_path,
-                'index_info': {'type': index_type, 'column': index_column} if index_type else None
+                'index_info': {'type': index_type, 'column': index_column} if index_type else None,
+                'encoding': encoding
             }
 
         command_parts = query.split(maxsplit=2)
@@ -550,40 +552,58 @@ class DatabaseManager:
                     return f"Error: tabla '{raw_table_name}' ya existe"
                 file_path = parsed_command.get('file_path')
                 index_info = parsed_command.get('index_info')
+                encoding = parsed_command.get('encoding', 'utf-8')
 
                 if not os.path.exists(file_path):
                     return f"Error: archivo no encontrado en '{file_path}'"
 
                 rows_data = []
                 inferred_columns = []
-                try:
-                    with open(file_path, 'r', newline='', encoding='utf-8') as csvfile:
-                        reader = csv.reader(csvfile)
-                        header = next(reader, None)
-                        if not header:
-                            return f"Error: archivo CSV '{file_path}' esta vacio o no tiene cabecera"
+                
+                # Try with specified encoding or attempt to detect it
+                encodings_to_try = [encoding] if encoding else ['utf-8', 'latin1', 'cp1252', 'ISO-8859-1']
+                success = False
+                
+                for enc in encodings_to_try:
+                    try:
+                        with open(file_path, 'r', newline='', encoding=enc) as csvfile:
+                            # Detect dialect for better CSV parsing
+                            sample = csvfile.read(4096)
+                            csvfile.seek(0)
+                            try:
+                                dialect = csv.Sniffer().sniff(sample)
+                            except:
+                                dialect = csv.excel  # Default to Excel dialect if detection fails
+                            
+                            reader = csv.reader(csvfile, dialect=dialect)
+                            header = next(reader, None)
+                            if not header:
+                                continue  # Try next encoding if file appears empty
 
-                        inferred_columns = [{'name': h.strip(), 'type': 'TEXT', 'type_details': {}, 'constraints':[], 'index_info': None} for h in header]
+                            inferred_columns = [{'name': h.strip(), 'type': 'TEXT', 'type_details': {}, 'constraints':[], 'index_info': None} for h in header]
 
-                        for row in reader:
-                            if len(row) == len(inferred_columns):
-                                row_dict = {inferred_columns[i]['name']: val for i, val in enumerate(row)}
-                                rows_data.append(row_dict)
-                            else:
-                                print(f"Warning: fila ignorada en '{file_path}' por numero incorrecto de columnas: {row}")
+                            for row in reader:
+                                if len(row) == len(inferred_columns):
+                                    row_dict = {inferred_columns[i]['name']: val for i, val in enumerate(row)}
+                                    rows_data.append(row_dict)
+                                else:
+                                    print(f"Warning: fila ignorada en '{file_path}' por numero incorrecto de columnas: {row}")
+                        
+                        success = True
+                        break  # Successfully processed file with this encoding
+                        
+                    except UnicodeDecodeError:
+                        # Try next encoding
+                        continue
+                    except Exception as e:
+                        return f"error procesando archivo '{file_path}' con encoding '{enc}': {e}"
 
+                if not success:
+                    return f"Error: No se pudo procesar el archivo '{file_path}' con ningún encoding. Intente especificar un encoding válido."
 
-                    self._tables[table_name_key] = {'columns': inferred_columns, 'rows': rows_data, 'original_name': raw_table_name}
-                    self._save_table_to_disk(table_name_key)
-                    return f"tabla '{raw_table_name}' creada desde '{file_path}' con {len(rows_data)} filas"
-                except FileNotFoundError:
-                    return f"Error: archivo no encontrado en '{file_path}'"
-                except csv.Error as csv_err:
-                    return f"error leyendo archivo CSV '{file_path}': {csv_err}"
-                except Exception as e:
-                    if table_name_key in self._tables:
-                        del self._tables[table_name_key]
-                    return f"error procesando archivo '{file_path}': {e}"
+                self._tables[table_name_key] = {'columns': inferred_columns, 'rows': rows_data, 'original_name': raw_table_name}
+                self._save_table_to_disk(table_name_key)
+                return f"tabla '{raw_table_name}' creada desde '{file_path}' con {len(rows_data)} filas"
 
             elif command == 'DROP_TABLE':
                 if table_name_key not in self._tables:

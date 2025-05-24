@@ -27,7 +27,7 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(files.router, prefix="/files", tags=["Files"])
-app.include_router(inventory.router, prefix="/query", tags=["Inventory"])
+app.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])  # Changed from "/query" to "/inventory"
 
 @app.get("/")
 async def root():
