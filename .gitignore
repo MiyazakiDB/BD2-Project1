@@ -70,4 +70,4 @@ uploads/*
 .env.*
 
 # frontend prueba
-.frontend_ian/
+frontend_ian/
