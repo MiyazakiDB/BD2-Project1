@@ -10,11 +10,12 @@ import tempfile
 
 # Configuración de la página
 st.set_page_config(
-    page_title="SQL Parser Console",
+    page_title="MiyazakiDB",
     page_icon="🗄️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
 
 # Estilos CSS personalizados
 st.markdown("""
@@ -35,7 +36,7 @@ st.markdown("""
         margin: 1rem 0;
     }
     .file-info {
-        background-color: #e7f3ff;
+        background-color: #b091ff;
         border-left: 4px solid #007bff;
         padding: 10px;
         margin: 10px 0;
@@ -166,7 +167,7 @@ class SQLParserFrontend:
         """Renderizar encabezado principal"""
         st.markdown("""
         <div class="main-header">
-            <h1>🗄️ SQL Parser Console</h1>
+            <h1>🗄️ MiyazakiDB</h1>
             <p>Consola avanzada para análisis de datos con SQL personalizado</p>
         </div>
         """, unsafe_allow_html=True)
@@ -180,9 +181,9 @@ class SQLParserFrontend:
 
         uploaded_files = st.sidebar.file_uploader(
             "Seleccionar archivos",
-            type=['csv', 'xlsx', 'xls', 'json'],
+            type=['txt', 'csv', 'xlsx', 'xls', 'json', 'dat', 'bin'],
             accept_multiple_files=True,
-            help="Formatos soportados: CSV, Excel, JSON"
+            help="Formatos soportados: CSV, Excel, JSON, TXT, DAT, BIN"
         )
 
         # Tipo de datos
@@ -239,7 +240,6 @@ class SQLParserFrontend:
 
         # Área de query
         col1, col2 = st.columns([3, 1])
-
         with col1:
             query = st.text_area(
                 "Escribir consulta SQL:",
@@ -250,7 +250,6 @@ class SQLParserFrontend:
 
         with col2:
             st.subheader("🔧 Herramientas")
-
             # Botones de acción
             if st.button("▶️ Ejecutar Query", type="primary"):
                 if query.strip():
@@ -493,7 +492,7 @@ class SQLParserFrontend:
         st.markdown("---")
         st.markdown(
             "<div style='text-align: center; color: gray;'>"
-            "🗄️ SQL Parser Console - Desarrollado con Streamlit"
+            "🗄️ MiyazakiDB - Desarrollado por Miyazaki Team"
             "</div>",
             unsafe_allow_html=True
         )

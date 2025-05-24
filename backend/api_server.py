@@ -1,8 +1,6 @@
 import sys
 import os
 import csv
-
-import uvicorn
 from fastapi import FastAPI, HTTPException, status, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from typing import Any, Optional
@@ -137,10 +135,3 @@ async def upload_file(
 @app.get("/", summary="Endpoint para uptime")
 async def read_root():
     return {"message": "MiyazakiDB API is up!"}
-
-if __name__ == "__main__":
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8000
-    )
