@@ -71,10 +71,12 @@ class MiyazakiDBApp:
 
                 if st.form_submit_button("🔑 Ingresar", type="primary"):
                     if email and password:
-                        user_data = self.auth.login_user(email, password)
-                        if user_data:
-                            st.success(f"¡Bienvenido {user_data['user']['name']}!")
+                        if self.auth.login_user(email, password):
+                            user_info = st.session_state.get('user_info', {})
+                            st.success(f"¡Bienvenido {user_info.get('name', 'Usuario')}!")
                             st.rerun()
+                        else:
+                            st.error("Error al iniciar sesión")
                     else:
                         st.warning("Por favor completa todos los campos")
 

@@ -7,6 +7,8 @@ from fastapi import FastAPI, HTTPException, status, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from typing import Any, Optional
 import chardet
+from backend.api import auth
+
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../parser/'))
 try:
@@ -23,6 +25,8 @@ app = FastAPI(
     description="API para interactuar con el sistema de datos multimodal.",
     version="0.1.0"
 )
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+
 
 DB_DIRECTORY = "db_data_api"
 if not os.path.exists(DB_DIRECTORY):

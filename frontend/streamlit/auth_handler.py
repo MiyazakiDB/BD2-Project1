@@ -9,14 +9,13 @@ class AuthHandler:
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
 
-    def register_user(self, name: str, email: str, password: str) -> bool:
-        """Registrar nuevo usuario"""
+    def register_user(self, username: str, email: str, password: str) -> bool:
         try:
             response = requests.post(
-                f"{self.base_url}/register",
-                json={"name": name, "email": email, "password": password}
+                f"{self.base_url}/auth/register",
+                json={"username": username, "email": email, "password": password}
             )
-            if response.status_code == 200:
+            if response.ok:
                 st.success("✅ Usuario registrado exitosamente")
                 return True
             else:
@@ -26,7 +25,7 @@ class AuthHandler:
             st.error(f"❌ Error de conexión: {str(e)}")
             return False
 
-    def login_user(self, email: str, password: str) -> Optional[Dict]:
+    def login_user(self, email: str, password: str) -> bool:
         """Iniciar sesión"""
         try:
             response = requests.post(
@@ -34,18 +33,17 @@ class AuthHandler:
                 data={"username": email, "password": password}
             )
             if response.status_code == 200:
-                user_data = response.json()
-                # Guardar tokens en session_state
-                st.session_state.access_token = user_data["access_token"]
-                st.session_state.user_info = user_data["user"]
+                tokens = response.json()
+                st.session_state.access_token = tokens["access_token"]
+                st.session_state.refresh_token = tokens.get("refresh_token")
                 st.session_state.is_authenticated = True
-                return user_data
+                return True
             else:
                 st.error("❌ Credenciales incorrectas")
-                return None
+                return False
         except Exception as e:
             st.error(f"❌ Error de conexión: {str(e)}")
-            return None
+            return False
 
     def logout(self):
         """Cerrar sesión"""
@@ -63,3 +61,16 @@ class AuthHandler:
     def is_authenticated(self) -> bool:
         """Verificar si el usuario está autenticado"""
         return st.session_state.get("is_authenticated", False)
+
+    def get_user_info(self) -> Optional[Dict]:
+        try:
+            headers = self.get_headers()
+            response = requests.get(f"{self.base_url}/auth/me", headers=headers)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                st.error("❌ No se pudo obtener información del usuario")
+                return None
+        except Exception as e:
+            st.error(f"❌ Error de conexión: {str(e)}")
+            return None
