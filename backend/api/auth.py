@@ -9,7 +9,6 @@ from backend.settings import SECRET_KEY, ALGORITHM
 
 router = APIRouter()
 
-# In-memory user store (replace with database in production)
 users_db = {}
 
 @router.post("/register", response_model=User)
