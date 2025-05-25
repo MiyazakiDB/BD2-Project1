@@ -130,11 +130,12 @@ class MiyazakiDBApp:
 
         # Actualizar lista de tablas
         if st.sidebar.button("🔄 Actualizar Tablas"):
-            st.session_state.current_tables = self.api.get_tables()
+            tables_response = self.api.get_tables()
+            tables = tables_response["tables"] if isinstance(tables_response, dict) else tables_response
+            st.session_state.current_tables = tables
 
         # Subir nuevo archivo
         st.sidebar.subheader("📤 Subir Archivo")
-
         uploaded_file = st.sidebar.file_uploader(
             "Seleccionar archivo",
             type=['csv', 'txt'],
@@ -163,14 +164,18 @@ class MiyazakiDBApp:
                         has_header=has_header
                     )
                     if success:
-                        st.session_state.current_tables = self.api.get_tables()
+                        tables_response = self.api.get_tables()
+                        tables = tables_response["tables"] if isinstance(tables_response, dict) else tables_response
+                        st.session_state.current_tables = tables
                         st.rerun()
 
         # Lista de tablas
         st.sidebar.subheader("📋 Tablas Disponibles")
 
         if not hasattr(st.session_state, 'current_tables') or not st.session_state.current_tables:
-            st.session_state.current_tables = self.api.get_tables()
+            tables_response = self.api.get_tables()
+            tables = tables_response["tables"] if isinstance(tables_response, dict) else tables_response
+            st.session_state.current_tables = tables
 
         for table in st.session_state.current_tables:
             with st.sidebar.expander(f"📄 {table['name']}"):
