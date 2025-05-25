@@ -148,7 +148,9 @@ class SQLParser:
     def _parse_insert_into(self, query):
         match_with_cols = re.match(r"INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\((.+)\)", query, re.IGNORECASE)
         if match_with_cols:
-            table_name, cols_str, values_str = match_with_cols.group()
+            table_name = match_with_cols.group(1)
+            cols_str = match_with_cols.group(2)
+            values_str = match_with_cols.group(3)
             target_columns = [col.strip() for col in cols_str.split(',')]
             values = [val.strip().strip("'").strip('"') for val in values_str.split(',')]
             return {
@@ -160,7 +162,8 @@ class SQLParser:
 
         match_no_cols = re.match(r"INSERT\s+INTO\s+(\w+)\s+VALUES\s*\((.+)\)", query, re.IGNORECASE)
         if match_no_cols:
-            table_name, values_str = match_no_cols.group()
+            table_name = match_no_cols.group(1)
+            values_str = match_no_cols.group(2)
             values = [val.strip().strip("'").strip('"') for val in values_str.split(',')]
             return {
                 'command': 'INSERT',
