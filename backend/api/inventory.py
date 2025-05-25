@@ -1,10 +1,10 @@
 import sys
 import os
-from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request, Form
 from fastapi.responses import JSONResponse, StreamingResponse
 import io
 import csv
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from parser.parser import SQLParser, DatabaseManager
@@ -29,45 +29,37 @@ def get_db_manager(user_id: UUID) -> DatabaseManager:
 
 @router.post("/")
 async def execute_sql_query(
-    request: Request,
-    query: str = Body(...),
+    query: str = Form(...),
     current_user: User = Depends(get_current_user)
 ):
     db_manager = get_db_manager(current_user.id)
     
     try:
+        if query.strip().upper().startswith("CREATE TABLE"):
+            parser = SQLParser()
+            parsed = parser.parse(query)
+            if parsed and parsed.get('command') == 'CREATE_TABLE':
+                table_name = parsed.get('table_name')
+                if hasattr(db_manager, '_tables') and table_name.lower() in [name.lower() for name in db_manager._tables.keys()]:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"A table with name '{table_name}' already exists"
+                    )
+                    
         result = db_manager.execute_query(query)
         
-        accept_header = request.headers.get("accept", "").lower()
-        
         if isinstance(result, list):
-            # For SELECT queries that return rows
-            if accept_header == "text/csv":
-                # Return as CSV
-                if not result:
-                    return StreamingResponse(
-                        io.StringIO("No data"),
-                        media_type="text/csv"
-                    )
-                
-                output = io.StringIO()
-                writer = csv.DictWriter(output, fieldnames=result[0].keys())
-                writer.writeheader()
-                writer.writerows(result)
-                
-                output.seek(0)
-                return StreamingResponse(
-                    output,
-                    media_type="text/csv",
-                    headers={"Content-Disposition": f"attachment; filename=query_result.csv"}
-                )
-            else:
-                # Return as JSON by default
-                return JSONResponse(content={"result": result})
+            return {"result": result}
         else:
-            # For other queries that return status messages
+            if isinstance(result, str) and result.startswith("Error:"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=result
+                )
             return {"message": result}
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -83,7 +75,14 @@ async def create_table_from_file(
     encoding: str = Body(None),
     current_user: User = Depends(get_current_user)
 ):
-    # Metada del archivo
+    db_manager = get_db_manager(current_user.id)
+    
+    if hasattr(db_manager, '_tables') and table_name.lower() in [name.lower() for name in db_manager._tables.keys()]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A table with name '{table_name}' already exists"
+        )
+        
     metadata = file_store.get_file_by_id(current_user.id, file_id)
     if not metadata:
         raise HTTPException(
@@ -91,7 +90,6 @@ async def create_table_from_file(
             detail="File not found"
         )
     
-    # Construcción de la tabla a partir del archivo
     query = f"CREATE TABLE {table_name} FROM FILE '{metadata['path']}'"
     
     if index_type and index_column:
@@ -100,8 +98,13 @@ async def create_table_from_file(
     if encoding:
         query += f" WITH ENCODING '{encoding}'"
     
-    db_manager = get_db_manager(current_user.id)
     result = db_manager.execute_query(query)
+    
+    if isinstance(result, str) and result.startswith("Error:"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result
+        )
     
     return {"message": result}
 

@@ -5,9 +5,12 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from uuid import UUID
+from sqlalchemy.orm import Session
 
 from backend.models.user import User, TokenPayload
 from backend.settings import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, REFRESH_TOKEN_EXPIRE_DAYS
+from backend.db.database import get_db
+from backend.db.repositories import UserRepository
 
 # Password hashing utility
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -42,7 +45,10 @@ def create_tokens(user_id: UUID, role: str = "user") -> tuple[str, str]:
     
     return access_token, refresh_token
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid authentication credentials",
@@ -64,10 +70,18 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
                 headers={"WWW-Authenticate": "Bearer"},
             )
             
-        # Here you would normally fetch the user from your database
-        # For now, we'll just create a user object with the ID from the token
-        user = User(id=UUID(token_data.sub), email="user@example.com", username="user")
-        user.role = token_data.role
+        # Get user from database
+        db_user = UserRepository.get_user_by_id(db, token_data.sub)
+        if not db_user:
+            raise credentials_exception
+            
+        # Create Pydantic user model from DB user
+        user = User(
+            id=UUID(db_user.id),
+            username=db_user.username,
+            email=db_user.email,
+            role=db_user.role
+        )
         
         return user
     except JWTError:

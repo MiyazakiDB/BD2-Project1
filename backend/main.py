@@ -11,6 +11,8 @@ from backend.api import auth, files, inventory
 from backend.core.auth.jwt import get_current_user
 from backend.models.user import User
 
+import backend.db
+
 app = FastAPI(
     title="Smart Stock API",
     description="Backend API for inventory management",
@@ -27,7 +29,7 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(files.router, prefix="/files", tags=["Files"])
-app.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])  # Changed from "/query" to "/inventory"
+app.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 
 @app.get("/")
 async def root():
