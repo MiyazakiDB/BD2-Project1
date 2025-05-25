@@ -17,19 +17,19 @@ class FileProcessor:
             DataType.ARRAY_FLOAT: self._validate_array_float
         }
     
-    async def process_file(self, file_path: str, columns: List[ColumnDefinition]) -> List[List[Any]]:
+    async def process_file(self, file_path: str, columns: List[ColumnDefinition], has_headers: bool = True) -> List[List[Any]]:
         file_ext = os.path.splitext(file_path)[1].lower()
         
         if file_ext == '.csv':
-            return await self._process_csv(file_path, columns)
+            return await self._process_csv(file_path, columns, has_headers)
         elif file_ext == '.txt':
-            return await self._process_txt(file_path, columns)
+            return await self._process_txt(file_path, columns, has_headers)
         elif file_ext == '.dat':
             return await self._process_dat(file_path, columns)
         else:
             raise ValueError(f"Unsupported file type: {file_ext}")
     
-    async def _process_csv(self, file_path: str, columns: List[ColumnDefinition]) -> List[List[Any]]:
+    async def _process_csv(self, file_path: str, columns: List[ColumnDefinition], has_headers: bool = True) -> List[List[Any]]:
         processed_data = []
         
         async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
@@ -57,32 +57,49 @@ class FileProcessor:
         
         return processed_data
     
-    async def _process_txt(self, file_path: str, columns: List[ColumnDefinition]) -> List[List[Any]]:
-        processed_data = []
+    async def _process_txt(self, file_path: str, columns: List[ColumnDefinition], has_headers: bool = True) -> List[List]:
+        data = []
         
+        # Usar aiofiles para operaciones asíncronas
         async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
-            async for line_num, line in enumerate(f, start=1):
+            line_num = 0
+            skip_first_line = has_headers  # Usar el parámetro has_headers
+            
+            async for line in f:
+                line_num += 1
                 line = line.strip()
-                if not line:
+                if not line:  # Skip empty lines
                     continue
                 
-                # Assume tab or space separated
-                values = line.split('\t') if '\t' in line else line.split()
-                
+                # Skip first non-empty line if it has headers
+                if skip_first_line:
+                    skip_first_line = False
+                    continue
+                    
+                # Split by delimiter (assuming comma, tab, or space)
+                if ',' in line:
+                    values = [v.strip() for v in line.split(',')]
+                elif '\t' in line:
+                    values = [v.strip() for v in line.split('\t')]
+                else:
+                    values = [v.strip() for v in line.split()]
+            
+                # Validate number of columns
                 if len(values) != len(columns):
-                    raise ValueError(f"Line {line_num}: Expected {len(columns)} values, got {len(values)}")
+                    raise ValueError(f"Line {line_num}: Expected {len(columns)} columns, got {len(values)}")
                 
+                # Type conversion based on column definitions
                 processed_row = []
-                for i, (value, column) in enumerate(zip(values, columns)):
+                for i, (value, col) in enumerate(zip(values, columns)):
                     try:
-                        validated_value = self._validate_and_convert(value, column)
-                        processed_row.append(validated_value)
-                    except ValueError as e:
-                        raise ValueError(f"Line {line_num}, Column {i+1} ({column.name}): {str(e)}")
-                
-                processed_data.append(processed_row)
+                        processed_value = self._convert_value(value, col.data_type)
+                        processed_row.append(processed_value)
+                    except Exception as e:
+                        raise ValueError(f"Line {line_num}, Column {col.name}: {str(e)}")
         
-        return processed_data
+            data.append(processed_row)
+    
+        return data
     
     async def _process_dat(self, file_path: str, columns: List[ColumnDefinition]) -> List[List[Any]]:
         # Assume DAT files are JSON format or binary format
@@ -167,6 +184,34 @@ class FileProcessor:
             return [float(x) for x in parts if x]
         except ValueError:
             raise ValueError(f"Invalid array format: {value}")
+    
+    def _convert_value(self, value: str, data_type: str):
+        """Convert string value to appropriate Python type based on data_type"""
+        if value.lower() in ('null', 'none', ''):
+            return None
+        
+        try:
+            if data_type == 'INT':
+                return int(value)
+            elif data_type == 'FLOAT':
+                return float(value)
+            elif data_type == 'VARCHAR':
+                return str(value)
+            elif data_type == 'BOOLEAN':
+                return value.lower() in ('true', '1', 'yes', 'on')
+            elif data_type == 'DATE':
+                from datetime import datetime
+                # Try common date formats
+                for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y-%m-%d %H:%M:%S']:
+                    try:
+                        return datetime.strptime(value, fmt).date()
+                    except ValueError:
+                        continue
+                raise ValueError(f"Invalid date format: {value}")
+            else:
+                return str(value)  # Default to string
+        except ValueError as e:
+            raise ValueError(f"Cannot convert '{value}' to {data_type}: {str(e)}")
     
     async def save_table_data(self, file_path: str, data: List[List[Any]]):
         os.makedirs(os.path.dirname(file_path), exist_ok=True)

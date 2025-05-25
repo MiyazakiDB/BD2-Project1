@@ -46,6 +46,7 @@ class CreateTableRequest(BaseModel):
     table_name: str
     file_name: str
     columns: List[ColumnDefinition]
+    has_headers: bool = True # Nuevo campo con valor por defecto
 
 class TableInfo(BaseModel):
     name: str

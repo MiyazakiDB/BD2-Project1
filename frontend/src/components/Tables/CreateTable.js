@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Form, Button, Alert, Card, Row, Col } from 'react-bootstrap';
+import { Form, Button, Alert, Card, Row, Col, Badge } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { tableService } from '../../services/api';
 
@@ -9,6 +9,8 @@ const CreateTable = () => {
   const [columns, setColumns] = useState([{ name: '', data_type: 'INT', is_indexed: false }]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [hasHeaders, setHasHeaders] = useState(true); // Nuevo estado para encabezados
 
   const dataTypes = ['INT', 'FLOAT', 'VARCHAR', 'BOOLEAN', 'DATE'];
 
@@ -31,30 +33,49 @@ const CreateTable = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Basic validation
+
     if (!tableName.trim()) {
       setError('Table name is required');
       return;
     }
 
-    const invalidColumns = columns.filter(col => !col.name.trim());
-    if (invalidColumns.length > 0) {
-      setError('All columns must have names');
+    if (!selectedFile) {
+      setError('File is required');
       return;
     }
 
     setLoading(true);
     setError('');
 
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('table_name', tableName);
+    formData.append('has_headers', hasHeaders.toString()); // Agregar información de encabezados
+    formData.append(
+      'columns',
+      JSON.stringify(
+        columns.map((col) => ({
+          name: col.name,
+          data_type: col.data_type,
+          size: col.data_type === 'VARCHAR' ? col.size || 255 : null,
+          index_type: col.is_indexed ? col.index_type || 'BTREE' : null,
+        }))
+      )
+    );
+
     try {
-      await tableService.createTable({
-        name: tableName,
-        columns: columns
-      });
+      await tableService.createTable(formData);
       navigate('/tables');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error creating table. Please try again.');
+      const errorDetail = err.response?.data?.detail;
+
+      if (Array.isArray(errorDetail)) {
+        setError(errorDetail.map((e) => e.msg).join(', '));
+      } else if (typeof errorDetail === 'string') {
+        setError(errorDetail);
+      } else {
+        setError('Error creating table. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -78,6 +99,36 @@ const CreateTable = () => {
                 placeholder="Enter table name"
                 required
               />
+            </Form.Group>
+
+            <Form.Group className="mb-4">
+              <Form.Label>File Upload</Form.Label>
+              <Form.Control
+                type="file"
+                onChange={(e) => setSelectedFile(e.target.files[0])}
+                required
+              />
+            </Form.Group>
+
+            {/* Nuevo campo para especificar si tiene encabezados */}
+            <Form.Group className="mb-4">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <Form.Label className="mb-0">File Header Settings</Form.Label>
+                <Badge bg={hasHeaders ? 'success' : 'secondary'} pill>
+                  {hasHeaders ? 'Headers: YES' : 'Headers: NO'}
+                </Badge>
+              </div>
+              <Form.Check
+                type="checkbox"
+                label="File has headers (first line contains column names)"
+                checked={hasHeaders}
+                onChange={(e) => setHasHeaders(e.target.checked)}
+              />
+              <Form.Text className="text-muted">
+                {hasHeaders 
+                  ? "The first line will be skipped as it contains column names." 
+                  : "All lines will be processed as data rows."}
+              </Form.Text>
             </Form.Group>
 
             <h5 className="mb-3">Columns</h5>

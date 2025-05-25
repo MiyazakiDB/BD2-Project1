@@ -13,7 +13,7 @@ security = HTTPBearer()
 class AuthService:
     def __init__(self):
         self.db_path = "users.db"
-        self.secret_key = os.getenv("JWT_SECRET_KEY")
+        self.secret_key = os.getenv("JWT_SECRET_KEY", "default_secret_key")
         self.algorithm = os.getenv("JWT_ALGORITHM", "HS256")
         self.access_token_expire_minutes = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     

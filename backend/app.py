@@ -1,8 +1,9 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query,APIRouter,Form
 from fastapi.security import HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
+import json
 
 from auth.auth_service import AuthService, get_current_user
 from catalog.metadata_catalog import MetadataCatalog
@@ -45,7 +46,7 @@ async def startup_event():
     await storage_manager.initialize()
 
 # API Router with prefix
-api_router = FastAPI()
+api_router = APIRouter()
 
 # Auth endpoints
 @api_router.post("/auth/register", response_model=AuthResponse)
@@ -76,11 +77,50 @@ async def delete_file(
     return await storage_manager.delete_file(filename, current_user["user_id"])
 
 # Table management endpoints
+from fastapi import UploadFile, File, Form
+
 @api_router.post("/tables/create", response_model=TableResponse)
 async def create_table(
-    table_data: CreateTableRequest,
+    table_name: str = Form(...),
+    columns: str = Form(...),
+    has_headers: str = Form("true"),  # Nuevo parámetro
+    file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
+    # Define el directorio de subida
+    upload_dir = "backend/uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Guarda el archivo en el servidor
+    file_path = os.path.join(upload_dir, file.filename)
+    
+    # Escribir el archivo
+    with open(file_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+    
+    # Verificar que el archivo se guardó correctamente
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=500, detail=f"Failed to save file {file_path}")
+
+    # Convierte las columnas de JSON a Python
+    try:
+        columns_data = json.loads(columns)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON format for columns")
+
+    # Convertir has_headers string a boolean
+    has_headers_bool = has_headers.lower() == "true"
+
+    # Crea el objeto CreateTableRequest con el parámetro has_headers
+    table_data = CreateTableRequest(
+        table_name=table_name,
+        file_name=file_path,
+        columns=columns_data,
+        has_headers=has_headers_bool  # Agregar este campo
+    )
+    
+    # Llama al método create_table
     return await catalog.create_table(table_data, current_user["user_id"])
 
 @api_router.get("/tables", response_model=List[TableInfo])
@@ -116,7 +156,9 @@ async def get_metrics(current_user: dict = Depends(get_current_user)):
     return await metrics_service.get_user_metrics(current_user["user_id"])
 
 # Mount the API router under /api prefix
-app.mount("/api", api_router)
+app.include_router(api_router, prefix="/api")
+
+
 
 if __name__ == "__main__":
     import uvicorn

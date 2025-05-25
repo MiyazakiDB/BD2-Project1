@@ -33,13 +33,15 @@ class MetadataCatalog:
         if table_key in self.catalog["tables"]:
             raise ValueError(f"Table {table_data.table_name} already exists")
         
-        # Process file and load data
-        file_path = os.path.join(self.data_dir, str(user_id), table_data.file_name)
+        # El archivo ya viene con la ruta completa desde el endpoint
+        file_path = table_data.file_name
+        
+        # Verificar que el archivo existe
         if not os.path.exists(file_path):
-            raise ValueError(f"File {table_data.file_name} not found")
+            raise ValueError(f"File {file_path} not found")
         
         # Process file data
-        processed_data = await self.file_processor.process_file(file_path, table_data.columns)
+        processed_data = await self.file_processor.process_file(file_path, table_data.columns, table_data.has_headers)
         
         # Create table metadata
         table_metadata = {
@@ -53,8 +55,12 @@ class MetadataCatalog:
             "indices": {}
         }
         
+        # Crear directorio de datos del usuario si no existe
+        user_data_dir = os.path.join(self.data_dir, str(user_id))
+        os.makedirs(user_data_dir, exist_ok=True)
+        
         # Save processed data
-        data_file_path = os.path.join(self.data_dir, f"{table_key}.dat")
+        data_file_path = os.path.join(user_data_dir, f"{table_key}.dat")
         await self.file_processor.save_table_data(data_file_path, processed_data)
         
         # Create indices for columns that specify them
@@ -112,7 +118,8 @@ class MetadataCatalog:
         metadata = self.catalog["tables"][table_key]
         
         # Delete data file
-        data_file_path = os.path.join(self.data_dir, metadata["data_file"])
+        user_data_dir = os.path.join(self.data_dir, str(user_id))
+        data_file_path = os.path.join(user_data_dir, metadata["data_file"])
         if os.path.exists(data_file_path):
             os.remove(data_file_path)
         

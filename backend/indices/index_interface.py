@@ -51,7 +51,14 @@ class IndexInterface:
     """Interface for managing different types of indices"""
     
     def __init__(self):
-        self.index_dir = os.getenv("INDEX_DIR", "../index")
+        
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Navega hacia la carpeta index en la raíz del proyecto
+        project_root = os.path.dirname(os.path.dirname(current_dir))
+        default_index_dir = os.path.join(project_root, "index")
+        
+        
+        self.index_dir = os.getenv("INDEX_DIR", default_index_dir)
         self.loaded_indices: Dict[str, BaseIndex] = {}
         self._index_classes = {}
         self._load_index_implementations()
