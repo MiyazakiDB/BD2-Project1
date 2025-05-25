@@ -21,11 +21,81 @@ const Login = ({ onLogin }) => {
     
     try {
       const response = await authService.login(credentials);
-      localStorage.setItem('token', response.data.token);
+      
+      // Debug: ver qué devuelve exactamente el servidor
+      console.log('Login response:', response);
+      console.log('Response data:', response.data);
+      
+      // Verificar diferentes formatos de token
+      let token = null;
+      if (response.data) {
+        // Intentar access_token primero, luego token
+        token = response.data.access_token || response.data.token;
+      }
+      
+      if (!token) {
+        console.error('No token found in response. Response data:', response.data);
+        throw new Error('No se recibió un token válido del servidor');
+      }
+      
+      // Almacenar el token
+      localStorage.setItem('token', token);
+      
+      console.log('Token guardado correctamente:', token);
+      
+      // Llamar a onLogin para actualizar el estado de autenticación
       onLogin();
+      
       navigate('/files');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error logging in. Please try again.');
+      console.error('Login error:', err);
+      console.error('Error response:', err.response);
+      
+      // Mejorar el manejo de errores para evitar renderizar objetos
+      let errorMessage = 'Error iniciando sesión. Verifica tus credenciales.';
+      
+      if (err.response?.data) {
+        const errorData = err.response.data;
+        
+        // Si es un array de errores de validación
+        if (Array.isArray(errorData) && errorData.length > 0) {
+          errorMessage = errorData.map(error => {
+            if (typeof error === 'string') return error;
+            return error.msg || error.message || 'Error de validación';
+          }).join(', ');
+        }
+        // Si es un objeto con detail
+        else if (errorData.detail) {
+          if (typeof errorData.detail === 'string') {
+            errorMessage = errorData.detail;
+          } else if (Array.isArray(errorData.detail)) {
+            errorMessage = errorData.detail.map(error => {
+              if (typeof error === 'string') return error;
+              return error.msg || error.message || 'Error de validación';
+            }).join(', ');
+          } else {
+            errorMessage = 'Error de validación del servidor';
+          }
+        }
+        // Si es un objeto con message
+        else if (errorData.message && typeof errorData.message === 'string') {
+          errorMessage = errorData.message;
+        }
+        // Si es un string directamente
+        else if (typeof errorData === 'string') {
+          errorMessage = errorData;
+        }
+        // Para cualquier otro caso, usar mensaje genérico
+        else {
+          errorMessage = 'Error del servidor';
+        }
+      }
+      // Si es un error de red sin respuesta
+      else if (err.message && typeof err.message === 'string') {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

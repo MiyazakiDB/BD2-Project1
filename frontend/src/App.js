@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Navbar from './components/Layout/Navbar';
 import Sidebar from './components/Layout/Sidebar';
 import Login from './components/Auth/Login';
@@ -15,24 +15,48 @@ import { Container, Row, Col } from 'react-bootstrap';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const navigate = useNavigate();
   
   // Check if user is authenticated on component mount
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    setIsAuthenticated(!!token);
+    const checkAuth = () => {
+      const token = localStorage.getItem('token');
+      console.log('Auth check - Token exists:', !!token);
+      setIsAuthenticated(!!token);
+    };
+    
+    checkAuth();
+    
+    // Agregar un event listener para detectar cambios en localStorage
+    window.addEventListener('storage', checkAuth);
+    
+    return () => {
+      window.removeEventListener('storage', checkAuth);
+    };
   }, []);
 
+  // Componente ProtectedRoute mejorado
   const ProtectedRoute = ({ children }) => {
-    return isAuthenticated ? children : <Navigate to="/login" />;
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      // Si no hay token, redirigir al login
+      return <Navigate to="/login" />;
+    }
+    
+    // Si hay token, mostrar el contenido protegido
+    return children;
   };
 
   const handleLogin = () => {
+    console.log('handleLogin called - setting authenticated state to true');
     setIsAuthenticated(true);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     setIsAuthenticated(false);
+    navigate('/login');
   };
 
   return (

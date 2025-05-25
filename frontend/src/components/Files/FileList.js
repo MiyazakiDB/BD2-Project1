@@ -1,21 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Alert } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { fileService } from '../../services/api';
 
 const FileList = () => {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   const fetchFiles = async () => {
     try {
       setLoading(true);
       const response = await fileService.listFiles();
       setFiles(response.data);
+      setError(''); // Limpiar errores anteriores
     } catch (err) {
-      setError('Error loading files. Please try again.');
-      console.error(err);
+      console.error('Error loading files:', err);
+      
+      if (err.response?.status === 401) {
+        setError('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+        
+        // Verificar si el token existe pero es inválido
+        const token = localStorage.getItem('token');
+        if (token) {
+          localStorage.removeItem('token');
+          // Opcional: redirigir al login después de un breve retraso
+          setTimeout(() => navigate('/login'), 2000);
+        }
+      } else {
+        setError('Error cargando archivos. Por favor intenta de nuevo.');
+      }
     } finally {
       setLoading(false);
     }
@@ -50,7 +65,9 @@ const FileList = () => {
       
       {error && <Alert variant="danger">{error}</Alert>}
       
-      {files.length === 0 ? (
+      {loading ? (
+        <div className="text-center">Loading files...</div>
+      ) : files.length === 0 ? (
         <Alert variant="info">You don't have any files yet. Upload your first file!</Alert>
       ) : (
         <Table striped bordered hover>

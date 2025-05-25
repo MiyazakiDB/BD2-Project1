@@ -28,6 +28,14 @@ const FileUpload = () => {
     setError('');
 
     try {
+      // Verify token presence before making request
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Authentication token is missing. Please log in again.');
+        navigate('/login');
+        return;
+      }
+
       await fileService.uploadFile(formData, {
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -37,7 +45,13 @@ const FileUpload = () => {
       
       navigate('/files');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error uploading file. Please try again.');
+      console.error('Upload error:', err);
+      if (err.response?.status === 401) {
+        setError('Your session has expired. Please log in again.');
+        navigate('/login');
+      } else {
+        setError(err.response?.data?.detail || 'Error uploading file. Please try again.');
+      }
     } finally {
       setUploading(false);
     }
