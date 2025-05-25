@@ -3,6 +3,11 @@ import json
 import sys
 import os
 import csv
+from indices.avl_file import AVLFile
+from indices.bplus_tree import BPlusTreeFile
+from indices.extendible_hash import DynamicHashFile
+from indices.isam import ISAMFile
+from indices.rtree import RTreeFile, Box
 
 class SQLParser:
     def __init__(self):
@@ -386,17 +391,12 @@ indices_dir = os.path.join(project_root, 'indices')
 if indices_dir not in sys.path:
     sys.path.insert(0, indices_dir)
 
-from avl_file import AVLFile
-from bplus_tree import BPlusTreeFile
-from extendible_hash import DynamicHashFile
-from isam import ISAMFile
-from rtree import RTreeFile, Box
-
 class DatabaseManager:
     def __init__(self, db_directory="db_data"):
         self.db_directory = db_directory
         self.metadata_file = os.path.join(db_directory, "db_metadata.json")
         self.tables_metadata = {}
+        self._tables = {}  # Inicializa _tables
         self.active_indexes = {}
         self._ensure_db_directory()
         self._load_metadata()
@@ -408,6 +408,8 @@ class DatabaseManager:
         if os.path.exists(self.metadata_file):
             with open(self.metadata_file, 'r', encoding="utf-8") as f:
                 self.tables_metadata = json.load(f)
+                # Asegura que _tables esté sincronizado con tables_metadata
+                self._tables = self.tables_metadata
             print("Metadatos cargados")
         else:
             print("No se encontraron metadatos, se creara uno nuevo")
@@ -561,11 +563,19 @@ class DatabaseManager:
                 return f"Tabla '{table_name}' creada desde '{file_path}' con {len(records)} filas y indice '{index_type}'"
         else:
             data_file_path = os.path.join(self.db_directory, f"{table_name_key}.jsonl")
-            with open(data_file_path, "w", encoding="utf-8") as f:
-                for record in records:
-                    f.write(json.dumps(record) + "\n")
-            self._save_metadata()
-            return f"Tabla '{table_name}' creada desde '{file_path}' con {len(records)} filas (sin indice)"
+            try:
+                with open(data_file_path, "w", encoding="utf-8") as f:
+                    for record in records:
+                        f.write(json.dumps(record) + "\n")
+                # Actualizar _tables para reflejar los metadatos
+                self._tables = self.tables_metadata
+                self._save_metadata()
+                return f"Tabla '{table_name}' creada desde '{file_path}' con {len(records)} filas (sin indice)"
+            except Exception as e:
+                # Eliminar entrada de metadatos si falla la creación del archivo
+                if table_name_key in self.tables_metadata:
+                    del self.tables_metadata[table_name_key]
+                return f"Error: No se pudo crear el archivo de datos para la tabla '{table_name}': {e}"
 
     def insert_into(self, command_data):
         table_name = command_data['table_name']
@@ -622,16 +632,29 @@ class DatabaseManager:
         meta = self.tables_metadata[table_name_key]
         where_clause = command_data.get('where_clause')
 
-        if not where_clause:
-            data_file_path = os.path.join(self.db_directory, f"{table_name_key}.jsonl")
-            if not os.path.exists(data_file_path):
-                return []
+        data_file_path = os.path.join(self.db_directory, f"{table_name_key}.jsonl")
+        if not os.path.exists(data_file_path):
+            # Crear archivo vacío si no existe
+            with open(data_file_path, 'w', encoding="utf-8") as f:
+                pass
+            print(f"Aviso: Se creó un archivo de datos vacío para la tabla '{table_name}'")
+            return []
 
+        if not where_clause:
             results = []
-            with open(data_file_path, 'r', encoding="utf-8") as f:
-                for line in f:
-                    results.append(json.loads(line))
-            return results
+            try:
+                with open(data_file_path, 'r', encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:  # Ignorar líneas vacías
+                            try:
+                                results.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                print(f"Aviso: Línea con formato JSON inválido en '{data_file_path}'")
+                return results
+            except Exception as e:
+                print(f"Error al leer archivo de datos '{data_file_path}': {e}")
+                return f"Error: No se pudo leer los datos de la tabla '{table_name}'"
 
         if where_clause['type'] == 'condition':
             col_to_search = where_clause['column']

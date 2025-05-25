@@ -53,18 +53,27 @@ async def execute_sql_query(
         result = db_manager.execute_query(query)
         
         if isinstance(result, list):
+            # Para consultas SELECT que pueden devolver listas vacías
             return {"result": result}
         else:
-            if isinstance(result, str) and result.startswith("Error:"):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=result
-                )
-            return {"message": result}
+            # Para otras consultas que devuelven mensajes
+            if isinstance(result, str):
+                if result.startswith("Error:"):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=result
+                    )
+                return {"message": result}
+            # Si el resultado no es una lista ni string, convertirlo a algo serializable
+            return {"message": str(result)}
     
     except HTTPException:
         raise
     except Exception as e:
+        # Mejorar el registro del error para depuración
+        import traceback
+        print(f"Error ejecutando consulta: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error al ejecutar la consulta: {str(e)}"
@@ -116,26 +125,27 @@ async def create_table_from_file(
 @router.get("/tables")
 async def list_tables(current_user: User = Depends(get_current_user)):
     """
-    List all tables in the user's database
+    Lista todas las tablas en la base de datos del usuario
     """
     try:
         db_manager = get_db_manager(current_user.id)
         
         tables = []
         
-        if hasattr(db_manager, '_tables'):
+        # Usar tables_metadata en lugar de buscar _tables
+        if hasattr(db_manager, 'tables_metadata') and db_manager.tables_metadata:
             tables = [
                 {
-                    "name": table_data.get('original_name', name),
-                    "row_count": len(table_data.get('rows', [])),
-                    "columns": len(table_data.get('columns', [])),
+                    "name": meta.get('original_name', name),
+                    "row_count": len(meta.get('rows', [])) if 'rows' in meta else 0,
+                    "columns": len(meta.get('columns', []))
                 }
-                for name, table_data in db_manager._tables.items()
+                for name, meta in db_manager.tables_metadata.items()
             ]
         
         return {"tables": tables}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving tables: {str(e)}"
+            detail=f"Error al recuperar tablas: {str(e)}"
         )
