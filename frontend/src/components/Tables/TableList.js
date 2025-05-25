@@ -50,62 +50,77 @@ const TableList = () => {
 
   if (loading) return <div className="text-center mt-5">Loading tables...</div>;
 
-  return (
-    <div className="mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>My Tables</h2>
-        <Button as={Link} to="/tables/create" variant="primary">
-          Create New Table
-        </Button>
-      </div>
-      
-      {error && <Alert variant="danger">{error}</Alert>}
-      
-      {tables.length === 0 ? (
-        <Alert variant="info">You don't have any tables yet. Create your first table!</Alert>
-      ) : (
-        <Table striped bordered hover>
-          <thead>
-            <tr>
-              <th>Table Name</th>
-              <th>Columns</th>
-              <th>Row Count</th>
-              <th>Created Date</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tables.map((table) => (
-              <tr key={table.name}>
-                <td>{table.name}</td>
-                <td>{table.columns?.length || 0}</td>
-                <td>{table.row_count || 0}</td>
-                <td>{new Date(table.created_at).toLocaleString()}</td>
-                <td>
-                  <Button 
-                    variant="primary" 
-                    size="sm"
-                    as={Link}
-                    to={`/tables/${table.name}`}
-                    className="me-2"
-                  >
-                    View Data
-                  </Button>
-                  <Button 
-                    variant="danger" 
-                    size="sm"
-                    onClick={() => handleDelete(table.name)}
-                  >
-                    Delete
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
+  // Mantén toda la lógica existente, solo cambia el return:
+
+return (
+  <div className="container fade-in">
+    <div className="smart-header">
+      <h1>Smart Stock Tables</h1>
+      <p>Manage your database tables</p>
     </div>
-  );
+
+    {error && <Alert variant="danger">{error}</Alert>}
+    
+    <div className="d-flex justify-content-between align-items-center mb-4">
+      <h2 style={{color: '#1e3a8a', margin: 0}}>My Tables</h2>
+      <Link to="/tables/create" className="btn btn-primary">
+        + Create Table
+      </Link>
+    </div>
+
+    {loading ? (
+      <div className="loading-state">
+        <div className="loading-spinner"></div>
+        <p>Loading your tables...</p>
+      </div>
+    ) : tables.length === 0 ? (
+      <div className="empty-state">
+        <div className="empty-state-icon">📊</div>
+        <h3>No tables found</h3>
+        <p>Create your first table to get started with Smart Stock</p>
+        <Link to="/tables/create" className="btn btn-primary">
+          Create Your First Table
+        </Link>
+      </div>
+    ) : (
+      <div className="card-grid">
+        {tables.map((table, index) => (
+          <div key={table.name} className="card-item slide-in-left" style={{animationDelay: `${index * 0.1}s`}}>
+            <div className="card-title">{table.name}</div>
+            <div className="card-subtitle">Database Table</div>
+            
+            <div style={{margin: '15px 0'}}>
+              <div className="d-flex justify-content-between mb-2">
+                <span style={{color: '#64748b'}}>Columns:</span>
+                <strong>{table.columns?.length || 0}</strong>
+              </div>
+              <div className="d-flex justify-content-between mb-2">
+                <span style={{color: '#64748b'}}>Rows:</span>
+                <strong>{table.row_count?.toLocaleString() || 0}</strong>
+              </div>
+              <div className="d-flex justify-content-between">
+                <span style={{color: '#64748b'}}>Created:</span>
+                <strong>{new Date(table.created_at).toLocaleDateString()}</strong>
+              </div>
+            </div>
+            
+            <div className="card-actions">
+              <Link to={`/tables/${table.name}`} className="btn btn-secondary btn-sm">
+                View Data
+              </Link>
+              <button 
+                onClick={() => handleDelete(table.name)} 
+                className="btn btn-danger btn-sm"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
 };
 
 export default TableList;

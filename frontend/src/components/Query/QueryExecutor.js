@@ -158,43 +158,49 @@ const QueryExecutor = () => {
   };
 
   return (
-    <div className="mt-4">
-      <h2>Query Executor</h2>
+    <div className="container fade-in">
+      <div className="smart-header">
+        <h1>Smart Stock</h1>
+        <p>Advanced Database Query System</p>
+      </div>
       
-      <Card>
-        <Card.Body>
-          <Form onSubmit={handleSubmit}>
-            <Form.Group className="mb-3">
-              <Form.Label>Enter SQL Query</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={5}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="SELECT * FROM table_name;"
-              />
-            </Form.Group>
+      <div className="mt-4">
+        <Card>
+          <div className="card-header">Query Executor</div>
+          <Card.Body>
+            <Form onSubmit={handleSubmit}>
+              <Form.Group className="mb-3">
+                <Form.Label>Enter SQL Query</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={5}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="SELECT * FROM table_name;"
+                />
+              </Form.Group>
 
-            <Button 
-              variant="primary" 
-              type="submit"
-              disabled={loading}
-            >
-              {loading ? 'Executing...' : 'Execute Query'}
-            </Button>
-          </Form>
-        </Card.Body>
-      </Card>
+              <Button 
+                variant="primary" 
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? 'Executing...' : 'Execute Query'}
+              </Button>
+            </Form>
+          </Card.Body>
+        </Card>
 
-      {error && <Alert variant="danger" className="mt-4">{error}</Alert>}
-      
-      {executionTime !== null && (
-        <Alert variant="info" className="mt-4">
-          Query executed in {executionTime.toFixed(2)} ms
-        </Alert>
-      )}
+        {error && <Alert variant="danger" className="mt-4">{error}</Alert>}
+        
+        {executionTime !== null && (
+          <Alert variant="info" className="mt-4">
+            Query executed in {executionTime.toFixed(2)} ms
+          </Alert>
+        )}
 
-      {renderResults()}
+        {renderResults()}
+      </div>
     </div>
   );
 };

@@ -1,43 +1,47 @@
 import React from 'react';
-import { Nav } from 'react-bootstrap';
-import { Link, useLocation } from 'react-router-dom';
+import { Nav, Button } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 
-const Sidebar = () => {
-  const location = useLocation();
-  
+const Sidebar = ({ onLogout }) => {
+  const handleLogout = () => {
+    if (onLogout) {
+      onLogout();
+    }
+  };
+
   return (
-    <Nav className="flex-column pt-3">
-      <Nav.Item>
-        <Nav.Link as={Link} to="/files" active={location.pathname === '/files'}>
+    <div className="sidebar">
+      <div style={{padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)'}}>
+        <h4 style={{color: 'white', margin: 0, display: 'flex', alignItems: 'center', gap: '10px'}}>
+          <span>💼</span>
+          Smart Stock
+        </h4>
+        <p style={{color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', margin: '5px 0 0 0'}}>
+          Database Management
+        </p>
+      </div>
+      
+      <Nav className="flex-column" style={{padding: '20px 0'}}>
+        <Nav.Link as={Link} to="/files" className="nav-link">
+          <span style={{marginRight: '10px'}}>📁</span>
           Files
         </Nav.Link>
-      </Nav.Item>
-      <Nav.Item>
-        <Nav.Link as={Link} to="/files/upload" active={location.pathname === '/files/upload'}>
-          Upload File
-        </Nav.Link>
-      </Nav.Item>
-      <Nav.Item>
-        <Nav.Link as={Link} to="/tables" active={location.pathname === '/tables'}>
+        <Nav.Link as={Link} to="/tables" className="nav-link">
+          <span style={{marginRight: '10px'}}>📊</span>
           Tables
         </Nav.Link>
-      </Nav.Item>
-      <Nav.Item>
-        <Nav.Link as={Link} to="/tables/create" active={location.pathname === '/tables/create'}>
-          Create Table
-        </Nav.Link>
-      </Nav.Item>
-      <Nav.Item>
-        <Nav.Link as={Link} to="/query" active={location.pathname === '/query'}>
+        <Nav.Link as={Link} to="/query" className="nav-link">
+          <span style={{marginRight: '10px'}}>🔍</span>
           Query Executor
         </Nav.Link>
-      </Nav.Item>
-      <Nav.Item>
-        <Nav.Link as={Link} to="/metrics" active={location.pathname === '/metrics'}>
+        <Nav.Link as={Link} to="/metrics" className="nav-link">
+          <span style={{marginRight: '10px'}}>📈</span>
           Metrics
         </Nav.Link>
-      </Nav.Item>
-    </Nav>
+      </Nav>
+      
+     
+    </div>
   );
 };
 

@@ -102,40 +102,56 @@ const Login = ({ onLogin }) => {
   };
 
   return (
-    <div className="auth-form">
-      <h2 className="text-center mb-4">Login</h2>
-      {error && <Alert variant="danger">{error}</Alert>}
-      <Form onSubmit={handleSubmit}>
-        <Form.Group className="mb-3">
-          <Form.Label>Username</Form.Label>
-          <Form.Control
-            type="text"
-            name="username"
-            value={credentials.username}
-            onChange={handleChange}
-            required
-          />
-        </Form.Group>
+    <div className="fade-in">
+      <div className="smart-header">
+        <h1>Smart Stock</h1>
+        <p>Database Management System</p>
+      </div>
+      
+      <div className="auth-form">
+        <h2 className="text-center mb-4">Welcome Back</h2>
+        {error && <Alert variant="danger">{error}</Alert>}
+        <Form onSubmit={handleSubmit}>
+          <Form.Group className="mb-3">
+            <Form.Label>Username</Form.Label>
+            <Form.Control
+              type="text"
+              name="username"
+              value={credentials.username}
+              onChange={handleChange}
+              required
+              placeholder="Enter your username"
+            />
+          </Form.Group>
 
-        <Form.Group className="mb-3">
-          <Form.Label>Password</Form.Label>
-          <Form.Control
-            type="password"
-            name="password"
-            value={credentials.password}
-            onChange={handleChange}
-            required
-          />
-        </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label>Password</Form.Label>
+            <Form.Control
+              type="password"
+              name="password"
+              value={credentials.password}
+              onChange={handleChange}
+              required
+              placeholder="Enter your password"
+            />
+          </Form.Group>
 
-        <Button variant="primary" type="submit" disabled={loading} className="w-100">
-          {loading ? 'Loading...' : 'Login'}
-        </Button>
-        
-        <div className="text-center mt-3">
-          Don't have an account? <Link to="/register">Register</Link>
-        </div>
-      </Form>
+          <Button variant="primary" type="submit" disabled={loading} className="w-100">
+            {loading ? (
+              <>
+                <span className="loading-spinner"></span>
+                Signing in...
+              </>
+            ) : (
+              'Sign In'
+            )}
+          </Button>
+          
+          <div className="text-center mt-3">
+            Don't have an account? <Link to="/register" style={{color: '#2563eb', fontWeight: '500'}}>Create Account</Link>
+          </div>
+        </Form>
+      </div>
     </div>
   );
 };

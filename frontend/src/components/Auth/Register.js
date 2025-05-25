@@ -115,9 +115,17 @@ const Register = ({ onLogin }) => {
     }
   };
 
-  return (
+ // Mantén toda la lógica existente, solo cambia el return:
+
+return (
+  <div className="fade-in">
+    <div className="smart-header">
+      <h1>Smart Stock</h1>
+      <p>Join our Database Management System</p>
+    </div>
+    
     <div className="auth-form">
-      <h2 className="text-center mb-4">Register</h2>
+      <h2 className="text-center mb-4">Create Account</h2>
       {error && <Alert variant="danger">{error}</Alert>}
       <Form onSubmit={handleSubmit}>
         <Form.Group className="mb-3">
@@ -128,6 +136,7 @@ const Register = ({ onLogin }) => {
             value={userData.username}
             onChange={handleChange}
             required
+            placeholder="Choose a username"
           />
         </Form.Group>
 
@@ -139,6 +148,7 @@ const Register = ({ onLogin }) => {
             value={userData.email}
             onChange={handleChange}
             required
+            placeholder="Enter your email"
           />
         </Form.Group>
 
@@ -150,19 +160,29 @@ const Register = ({ onLogin }) => {
             value={userData.password}
             onChange={handleChange}
             required
+            placeholder="Create a secure password"
           />
         </Form.Group>
 
         <Button variant="primary" type="submit" disabled={loading} className="w-100">
-          {loading ? 'Processing...' : 'Register'}
+          {loading ? (
+            <>
+              <span className="loading-spinner"></span>
+              Creating account...
+            </>
+          ) : (
+            'Create Account'
+          )}
         </Button>
         
         <div className="text-center mt-3">
-          Already have an account? <Link to="/login">Login</Link>
+          Already have an account? <Link to="/login" style={{color: '#2563eb', fontWeight: '500'}}>Sign In</Link>
         </div>
       </Form>
     </div>
-  );
+  </div>
+);
+
 };
 
 export default Register;
