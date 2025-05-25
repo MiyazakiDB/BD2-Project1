@@ -3,20 +3,60 @@ import shutil
 from uuid import UUID
 from typing import List, Dict, Any, Optional
 import csv
-from fastapi import UploadFile, HTTPException
 import json
-from pathlib import Path
+from fastapi import UploadFile, HTTPException, status
 
 from backend.settings import DATA_DIR, UPLOAD_DIR, TABLES_DIR
 
 class UserFileStore:
     def __init__(self):
         self._ensure_dirs_exist()
+        # In-memory metadata store (would be a database in production)
         self._files_metadata: Dict[UUID, Dict[str, Any]] = {}
+        self._load_metadata_from_disk()
     
     def _ensure_dirs_exist(self):
         os.makedirs(DATA_DIR, exist_ok=True)
+        
+    def _get_metadata_path(self):
+        return os.path.join(DATA_DIR, "file_metadata.json")
     
+    def _save_metadata_to_disk(self):
+        """Save all file metadata to disk for persistence"""
+        # Convert UUIDs to strings for JSON serialization
+        serializable_metadata = {}
+        for file_id, metadata in self._files_metadata.items():
+            serializable_metadata[str(file_id)] = {
+                **metadata,
+                "id": str(metadata["id"]),
+                "owner_id": str(metadata["owner_id"])
+            }
+        
+        try:
+            with open(self._get_metadata_path(), 'w') as f:
+                json.dump(serializable_metadata, f, indent=2)
+        except Exception as e:
+            print(f"Error saving file metadata: {e}")
+    
+    def _load_metadata_from_disk(self):
+        """Load file metadata from disk on startup"""
+        if not os.path.exists(self._get_metadata_path()):
+            return
+            
+        try:
+            with open(self._get_metadata_path(), 'r') as f:
+                serialized_data = json.load(f)
+                
+            for file_id, metadata in serialized_data.items():
+                # Convert string IDs back to UUIDs
+                self._files_metadata[UUID(file_id)] = {
+                    **metadata,
+                    "id": UUID(metadata["id"]),
+                    "owner_id": UUID(metadata["owner_id"])
+                }
+        except Exception as e:
+            print(f"Error loading file metadata: {e}")
+
     def _get_user_dir(self, user_id: UUID) -> str:
         user_dir = os.path.join(DATA_DIR, str(user_id))
         os.makedirs(user_dir, exist_ok=True)
@@ -35,14 +75,26 @@ class UserFileStore:
     async def save_file(self, user_id: UUID, file: UploadFile, file_id: UUID) -> Dict[str, Any]:
         upload_dir = self._get_user_uploads_dir(user_id)
         
+        # Generate safe filename to avoid path traversal attacks
         original_filename = os.path.basename(file.filename)
+        
+        # Check if file with same name already exists for this user
+        if self._file_exists_by_name(user_id, original_filename):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A file with name '{original_filename}' already exists"
+            )
+            
         file_path = os.path.join(upload_dir, f"{file_id}_{original_filename}")
         
+        # Save file
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
+        # Get file size
         file_size = os.path.getsize(file_path)
         
+        # Store metadata
         metadata = {
             "id": file_id,
             "owner_id": user_id,
@@ -52,9 +104,19 @@ class UserFileStore:
             "mime_type": file.content_type or "application/octet-stream"
         }
         self._files_metadata[file_id] = metadata
+
+        # Save updated metadata to disk
+        self._save_metadata_to_disk()
         
         return metadata
     
+    def _file_exists_by_name(self, user_id: UUID, filename: str) -> bool:
+        """Check if a file with the given name already exists for this user"""
+        for metadata in self._files_metadata.values():
+            if metadata["owner_id"] == user_id and metadata["filename"] == filename:
+                return True
+        return False
+        
     def get_user_files(self, user_id: UUID) -> List[Dict[str, Any]]:
         return [
             metadata for metadata in self._files_metadata.values()
@@ -80,6 +142,9 @@ class UserFileStore:
             os.remove(file_path)
         
         del self._files_metadata[file_id]
+
+        # Save updated metadata to disk
+        self._save_metadata_to_disk()
         
         return True
     

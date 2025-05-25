@@ -71,3 +71,15 @@ uploads/*
 
 # frontend prueba
 data/
+
+# Ignore all files in the data directory
+/data/*
+
+# But keep the directory itself with .gitkeep
+!/data/.gitkeep
+
+# Specifically exclude the users database
+/data/users.db
+
+# Also exclude any user-specific data
+/data/file_metadata.json
