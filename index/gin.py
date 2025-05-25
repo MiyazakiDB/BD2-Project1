@@ -5,6 +5,9 @@ import json
 from collections import defaultdict
 
 import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('wordnet')
 
 try:
     nltk.data.find('corpora/stopwords')

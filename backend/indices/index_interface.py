@@ -61,14 +61,14 @@ class IndexInterface:
         try:
             # Map of index types to their expected file/class names
             index_mappings = {
-                IndexType.AVL: ("avl", "AVLIndex"),
-                IndexType.HASH: ("hash", "HashIndex"),
-                IndexType.BTREE: ("btree", "BTreeIndex"),
+                IndexType.AVL: ("avl_file", "AVLFile"),
+                IndexType.HASH: ("extendible_hash", "DynamicHashFile"),
+                IndexType.BTREE: ("bplus_tree", "BPlusTreeFile"),
                 IndexType.GIN: ("gin", "GINIndex"),
-                IndexType.ISAM: ("isam", "ISAMIndex"),
-                IndexType.RTREE: ("rtree", "RTreeIndex"),
-                IndexType.IVF: ("ivf", "IVFIndex"),
-                IndexType.ISH: ("ish", "ISHIndex")
+                IndexType.ISAM: ("isam", "ISAMFile"),
+                IndexType.RTREE: ("rtree", "RTreeFile"),
+                # IndexType.IVF: ("ivf", "IVFIndex"),
+                # IndexType.ISH: ("ish", "ISHIndex")
             }
             
             for index_type, (filename, class_name) in index_mappings.items():
