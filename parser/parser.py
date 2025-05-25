@@ -288,9 +288,10 @@ class Parser:
             self.consume(TokenType.RPAREN, "Expect ')' after value list.")
             return InExpr(column, values)
             
-        elif self.match(TokenType.EQUAL, TokenType.NOT_EQUAL, 
-                         TokenType.LESS, TokenType.LESS_EQUAL, 
-                         TokenType.GREATER, TokenType.GREATER_EQUAL):
+        # Match the exact token type names from the scanner module
+        elif self.match(TokenType.EQUALS, TokenType.NOT_EQUALS, 
+                         TokenType.LESS_THAN, TokenType.LESS_EQUALS, 
+                         TokenType.GREATER_THAN, TokenType.GREATER_EQUALS):
             operator = self.previous().type
             right = self.value()
             return BinaryExpr(column, operator, right)
