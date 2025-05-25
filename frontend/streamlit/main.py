@@ -48,6 +48,8 @@ class MiyazakiDBApp:
             st.session_state.query_history = []
         if 'current_tables' not in st.session_state:
             st.session_state.current_tables = []
+        if 'last_uploaded_file_id' not in st.session_state:
+            st.session_state.last_uploaded_file_id = None
 
     def render_auth_screen(self):
         """Pantalla de autenticación"""
@@ -142,31 +144,35 @@ class MiyazakiDBApp:
             help="Formatos soportados: CSV, TXT"
         )
 
-        if uploaded_file:
-            with st.sidebar.form("upload_form"):
-                table_name = st.text_input("Nombre de tabla", value=uploaded_file.name.split('.')[0])
-                delimiter = st.selectbox("Delimitador", [",", ";", "\t", "|", ":"])
+        # Paso 1: Subir archivo y guardar file_id
+        if uploaded_file and st.sidebar.button("Subir archivo"):
+            file_id = self.api.upload_file(uploaded_file)
+            if file_id:
+                st.session_state.last_uploaded_file_id = file_id
+                st.sidebar.success("Archivo subido. Ahora completa los datos para crear la tabla.")
+
+        # Paso 2: Mostrar formulario para crear tabla si ya hay file_id
+        if st.session_state.last_uploaded_file_id:
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("➕ Crear Tabla desde Archivo Subido")
+            with st.sidebar.form("create_table_form"):
+                table_name = st.text_input("Nombre de tabla")
+                index_type = st.selectbox("Tipo de índice", ["", "BTree", "Hash", "RTree"])
+                index_column = st.text_input("Columna índice")
                 encoding = st.text_input("Codificación", value="utf-8")
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    index_type = st.selectbox("Tipo de índice", ["", "BTree", "Hash", "RTree"])
-                with col2:
-                    index_column = st.text_input("Columna índice")
-
-                has_header = st.checkbox("¿Tiene cabecera?", value=True)
-
-                if st.form_submit_button("📤 Subir y Crear Tabla"):
-                    success = self.api.upload_file_and_create_table(
-                        uploaded_file, table_name,
-                        delimiter=delimiter, encoding=encoding,
-                        index_type=index_type, index_column=index_column,
-                        has_header=has_header
+                if st.form_submit_button("Crear Tabla"):
+                    success = self.api.create_table_from_file(
+                        table_name,
+                        st.session_state.last_uploaded_file_id,
+                        index_type=index_type,
+                        index_column=index_column,
+                        encoding=encoding
                     )
                     if success:
                         tables_response = self.api.get_tables()
                         tables = tables_response["tables"] if isinstance(tables_response, dict) else tables_response
                         st.session_state.current_tables = tables
+                        st.session_state.last_uploaded_file_id = None
                         st.rerun()
 
         # Lista de tablas
