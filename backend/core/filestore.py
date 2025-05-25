@@ -12,7 +12,6 @@ from backend.settings import DATA_DIR, UPLOAD_DIR, TABLES_DIR
 class UserFileStore:
     def __init__(self):
         self._ensure_dirs_exist()
-        # In-memory metadata store (would be a database in production)
         self._files_metadata: Dict[UUID, Dict[str, Any]] = {}
     
     def _ensure_dirs_exist(self):
@@ -36,18 +35,14 @@ class UserFileStore:
     async def save_file(self, user_id: UUID, file: UploadFile, file_id: UUID) -> Dict[str, Any]:
         upload_dir = self._get_user_uploads_dir(user_id)
         
-        # Generate safe filename to avoid path traversal attacks
         original_filename = os.path.basename(file.filename)
         file_path = os.path.join(upload_dir, f"{file_id}_{original_filename}")
         
-        # Save file
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Get file size
         file_size = os.path.getsize(file_path)
         
-        # Store metadata
         metadata = {
             "id": file_id,
             "owner_id": user_id,
@@ -69,7 +64,6 @@ class UserFileStore:
     def get_file_by_id(self, user_id: UUID, file_id: UUID) -> Optional[Dict[str, Any]]:
         metadata = self._files_metadata.get(file_id)
         
-        # Check file exists and belongs to user
         if not metadata or metadata["owner_id"] != user_id:
             return None
         
@@ -81,12 +75,10 @@ class UserFileStore:
         if not metadata:
             return False
         
-        # Delete the physical file
         file_path = metadata["path"]
         if os.path.exists(file_path):
             os.remove(file_path)
         
-        # Remove metadata
         del self._files_metadata[file_id]
         
         return True
@@ -101,11 +93,9 @@ class UserFileStore:
         if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail="File not found on disk")
         
-        # Check if file is CSV
         if not metadata["mime_type"].startswith("text/csv") and not file_path.endswith(".csv"):
             raise HTTPException(status_code=400, detail="File is not a CSV")
         
-        # Return a file reader that can be iterated over
         def csv_reader():
             with open(file_path, 'r', newline='', encoding='utf-8') as csvfile:
                 reader = csv.reader(csvfile)
@@ -114,5 +104,4 @@ class UserFileStore:
         
         return csv_reader()
 
-# Singleton instance
 file_store = UserFileStore()

@@ -1,10 +1,10 @@
 import sys
 import os
-from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request, Form
 from fastapi.responses import JSONResponse, StreamingResponse
 import io
 import csv
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from parser.parser import SQLParser, DatabaseManager
@@ -29,8 +29,7 @@ def get_db_manager(user_id: UUID) -> DatabaseManager:
 
 @router.post("/")
 async def execute_sql_query(
-    request: Request,
-    query: str = Body(...),
+    query: str = Form(...),
     current_user: User = Depends(get_current_user)
 ):
     db_manager = get_db_manager(current_user.id)
@@ -38,32 +37,10 @@ async def execute_sql_query(
     try:
         result = db_manager.execute_query(query)
         
-        accept_header = request.headers.get("accept", "").lower()
-        
+        # Handle results based on type
         if isinstance(result, list):
             # For SELECT queries that return rows
-            if accept_header == "text/csv":
-                # Return as CSV
-                if not result:
-                    return StreamingResponse(
-                        io.StringIO("No data"),
-                        media_type="text/csv"
-                    )
-                
-                output = io.StringIO()
-                writer = csv.DictWriter(output, fieldnames=result[0].keys())
-                writer.writeheader()
-                writer.writerows(result)
-                
-                output.seek(0)
-                return StreamingResponse(
-                    output,
-                    media_type="text/csv",
-                    headers={"Content-Disposition": f"attachment; filename=query_result.csv"}
-                )
-            else:
-                # Return as JSON by default
-                return JSONResponse(content={"result": result})
+            return {"result": result}
         else:
             # For other queries that return status messages
             return {"message": result}
