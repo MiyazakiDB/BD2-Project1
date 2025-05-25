@@ -188,23 +188,36 @@ async def execute_query(
         
         result = await query_planner.execute_query(query_data.query, current_user["user_id"])
         
+        print(f"Query result from planner: {result}")
         print(f"Query result type: {type(result)}")
         print(f"Query result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
-        print(f"Query result: {result}")
         
-        # Asegurar formato correcto para el modelo QueryResponse
-        formatted_result = {
-            "columns": result.get("columns", []),
-            "data": result.get("data", []),
-            "execution_time_ms": result.get("execution_time_ms", 0),
-            "page": result.get("page", 1),
-            "total_pages": result.get("total_pages", 1),  # Agregar campo faltante
-            "current_page": result.get("current_page", result.get("page", 1)),  # Agregar campo faltante
-            "rows_affected": len(result.get("data", [])),  # Agregar campo faltante
-            "io_operations": result.get("io_operations", 1)  # Agregar campo faltante
-        }
+        # PROBLEMA: Asegurar que devolvemos el objeto completo, no solo los datos
+        if isinstance(result, dict):
+            formatted_result = {
+                "columns": result.get("columns", []),
+                "data": result.get("data", []),
+                "execution_time_ms": result.get("execution_time_ms", 0),
+                "page": result.get("page", 1),
+                "total_pages": result.get("total_pages", 1),
+                "current_page": result.get("current_page", result.get("page", 1)),
+                "rows_affected": len(result.get("data", [])),
+                "io_operations": result.get("io_operations", 1)
+            }
+        else:
+            # Si result no es un dict, crear estructura válida
+            formatted_result = {
+                "columns": [],
+                "data": result if isinstance(result, list) else [],
+                "execution_time_ms": 0,
+                "page": 1,
+                "total_pages": 1,
+                "current_page": 1,
+                "rows_affected": len(result) if isinstance(result, list) else 0,
+                "io_operations": 1
+            }
         
-        print(f"Formatted result: {formatted_result}")
+        print(f"Formatted result being sent: {formatted_result}")
         print(f"=== END QUERY ENDPOINT DEBUG ===")
         
         return formatted_result

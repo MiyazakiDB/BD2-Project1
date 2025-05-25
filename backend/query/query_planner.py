@@ -53,16 +53,24 @@ class QueryPlanner:
             # Calculate execution time
             execution_time = (time.time() - start_time) * 1000
             
-            # Add metadata to result
+            # IMPORTANTE: Asegurar que devolvemos estructura completa
             if isinstance(result, dict):
                 result["execution_time_ms"] = execution_time
+                print(f"Final result (dict): {result}")
             else:
+                # Si result no es dict, crear estructura válida
                 result = {
-                    "data": result,
-                    "execution_time_ms": execution_time
+                    "columns": [],
+                    "data": result if isinstance(result, list) else [],
+                    "execution_time_ms": execution_time,
+                    "page": 1,
+                    "total_pages": 1,
+                    "current_page": 1,
+                    "rows_affected": len(result) if isinstance(result, list) else 0,
+                    "io_operations": 1
                 }
-            
-            print(f"Final result: {result}")
+                print(f"Final result (converted): {result}")
+        
             print(f"=== END EXECUTE QUERY DEBUG ===")
             
             return result

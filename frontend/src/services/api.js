@@ -89,7 +89,13 @@ export const tableService = {
 export const queryService = {
   executeQuery: async (query) => {
     const response = await api.post('/query', { query });
-    return response.data; // Devolver directamente response.data
+    
+    console.log('=== API SERVICE DEBUG ===');
+    console.log('Full axios response:', response);
+    console.log('Response.data:', response.data);
+    console.log('=== END API SERVICE DEBUG ===');
+    
+    return response.data; // Devolver el objeto completo, no solo los datos
   },
 };
 

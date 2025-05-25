@@ -27,36 +27,17 @@ const QueryExecutor = () => {
       
       const response = await queryService.executeQuery(query);
       
-      console.log('=== RAW AXIOS RESPONSE ===');
-      console.log('Full Axios response:', response);
-      console.log('Response status:', response?.status);
-      console.log('Response data type:', typeof response);
+      console.log('=== RAW RESPONSE FROM API SERVICE ===');
+      console.log('Full response:', response);
+      console.log('Response type:', typeof response);
       console.log('Response keys:', Object.keys(response || {}));
+      console.log('Response.columns:', response?.columns);
+      console.log('Response.data:', response?.data);
+      console.log('=== END RESPONSE ANALYSIS ===');
       
-      // Determinar la estructura de datos correcta
-      let actualData;
-      if (response.data) {
-        // Si la respuesta tiene estructura de Axios (response.data)
-        actualData = response.data;
-        console.log('Using response.data structure');
-      } else {
-        // Si la respuesta ya es los datos directos
-        actualData = response;
-        console.log('Using direct response structure');
-      }
-      
-      console.log('=== ACTUAL DATA TO USE ===');
-      console.log('Actual data:', actualData);
-      console.log('Actual data type:', typeof actualData);
-      console.log('Actual data keys:', Object.keys(actualData || {}));
-      console.log('Columns:', actualData?.columns);
-      console.log('Data rows:', actualData?.data);
-      console.log('Rows count:', actualData?.data?.length);
-      console.log('Execution time:', actualData?.execution_time_ms);
-      console.log('=== END QUERY RESPONSE ANALYSIS ===');
-      
-      setResults(actualData);
-      setExecutionTime(actualData?.execution_time_ms || 0);
+      // CORRECCIÓN: response ya es el objeto correcto
+      setResults(response);  // ✅ Usar response directamente
+      setExecutionTime(response?.execution_time_ms || 0);
       
     } catch (err) {
       console.error('=== QUERY EXECUTION ERROR ===');
@@ -82,7 +63,7 @@ const QueryExecutor = () => {
       return null;
     }
 
-    // Verificar si tenemos datos en formato esperado del backend
+    // ✅ CORRECCIÓN: Verificar el formato correcto del backend
     if (results.data && Array.isArray(results.data) && results.data.length > 0) {
       console.log('Rendering table with backend format');
       console.log('Columns:', results.columns);
