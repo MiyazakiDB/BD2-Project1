@@ -38,6 +38,16 @@ class AuthHandler:
                 st.session_state.access_token = tokens["access_token"]
                 st.session_state.refresh_token = tokens.get("refresh_token")
                 st.session_state.is_authenticated = True
+                
+                # Limpia tablas y resultados previos
+                st.session_state.current_tables = []
+                st.session_state.last_uploaded_file_id = None
+                st.session_state.query_history = []
+                st.session_state.last_result = None
+                user_info = st.session_state.get('user_info', {})
+                st.success(f"¡Bienvenido {user_info.get('name', 'Usuario')}!")
+                st.rerun()
+                
                 return True
             else:
                 st.error("❌ Credenciales incorrectas")
@@ -48,7 +58,10 @@ class AuthHandler:
 
     def logout(self):
         """Cerrar sesión"""
-        for key in ["access_token", "user_info", "is_authenticated"]:
+        for key in [
+            "auth_token", "user_info", "is_authenticated",
+            "current_tables", "last_uploaded_file_id", "query_history", "last_result"
+        ]:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
