@@ -70,5 +70,4 @@ uploads/*
 .env.*
 
 # frontend prueba
-frontend_ian/
 data/
