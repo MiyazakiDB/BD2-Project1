@@ -1,5 +1,5 @@
-import json
 import os
+import json
 from typing import Dict, List, Optional
 from datetime import datetime
 from api.schemas import CreateTableRequest, TableInfo, ColumnDefinition, TableResponse
@@ -9,12 +9,15 @@ from utils.metrics import MetricsService
 class MetadataCatalog:
     def __init__(self):
         self.catalog_file = os.getenv("CATALOG_FILE", "./catalog.json")
-        self.data_dir = os.getenv("DATA_DIR", "../data")
+        self.data_dir = os.getenv("DATA_DIR", "./data")  # Cambiar de "../data" a "./data"
         self.catalog: Dict = {}
         self.file_processor = FileProcessor()
         self.metrics = MetricsService()
     
     async def initialize(self):
+        # Crear directorio de datos si no existe
+        os.makedirs(self.data_dir, exist_ok=True)
+        
         if os.path.exists(self.catalog_file):
             with open(self.catalog_file, 'r') as f:
                 self.catalog = json.load(f)
@@ -43,6 +46,18 @@ class MetadataCatalog:
         # Process file data
         processed_data = await self.file_processor.process_file(file_path, table_data.columns, table_data.has_headers)
         
+        # Crear directorio de datos del usuario si no existe
+        user_data_dir = os.path.join(self.data_dir, str(user_id))
+        os.makedirs(user_data_dir, exist_ok=True)
+        
+        # Usar rutas absolutas para evitar problemas
+        data_file_name = f"{table_key}.dat"
+        data_file_path = os.path.join(user_data_dir, data_file_name)
+        data_file_path = os.path.abspath(data_file_path)  # Convertir a ruta absoluta
+        
+        # Save processed data
+        await self.file_processor.save_table_data(data_file_path, processed_data)
+        
         # Create table metadata
         table_metadata = {
             "name": table_data.table_name,
@@ -51,17 +66,9 @@ class MetadataCatalog:
             "columns": [col.dict() for col in table_data.columns],
             "row_count": len(processed_data),
             "created_at": datetime.now().isoformat(),
-            "data_file": f"{table_key}.dat",
+            "data_file": data_file_path,  # Guardar la ruta absoluta
             "indices": {}
         }
-        
-        # Crear directorio de datos del usuario si no existe
-        user_data_dir = os.path.join(self.data_dir, str(user_id))
-        os.makedirs(user_data_dir, exist_ok=True)
-        
-        # Save processed data
-        data_file_path = os.path.join(user_data_dir, f"{table_key}.dat")
-        await self.file_processor.save_table_data(data_file_path, processed_data)
         
         # Create indices for columns that specify them
         for col in table_data.columns:
@@ -75,6 +82,8 @@ class MetadataCatalog:
         self.catalog["tables"][table_key] = table_metadata
         await self._save_catalog()
         
+        print(f"Table created successfully. Data file: {data_file_path}")  # Debug
+        
         return TableResponse(
             message=f"Table {table_data.table_name} created successfully",
             table_name=table_data.table_name,
@@ -83,7 +92,7 @@ class MetadataCatalog:
     
     async def _create_index(self, table_key: str, column_name: str, index_type: str, data: List[List]) -> str:
         # This would interface with your existing index implementations
-        index_dir = os.getenv("INDEX_DIR", "../index")
+        index_dir = os.getenv("INDEX_DIR", "./index")
         index_file = f"{table_key}_{column_name}_{index_type.lower()}.idx"
         index_path = os.path.join(index_dir, index_file)
         
@@ -118,9 +127,8 @@ class MetadataCatalog:
         metadata = self.catalog["tables"][table_key]
         
         # Delete data file
-        user_data_dir = os.path.join(self.data_dir, str(user_id))
-        data_file_path = os.path.join(user_data_dir, metadata["data_file"])
-        if os.path.exists(data_file_path):
+        data_file_path = metadata.get("data_file")
+        if data_file_path and os.path.exists(data_file_path):
             os.remove(data_file_path)
         
         # Delete index files

@@ -1,0 +1,17 @@
+{
+  "query_times": {
+    "0": [
+      2.9821395874023438,
+      4.004955291748047
+    ]
+  },
+  "io_operations": {
+    "0": 0
+  },
+  "total_queries": {
+    "0": 2
+  },
+  "buffer_cache_stats": {},
+  "active_tables": {},
+  "last_updated": "2025-05-25T14:33:44.501317"
+}

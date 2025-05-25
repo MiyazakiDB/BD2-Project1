@@ -11,6 +11,7 @@ from api.responses import ResponseFormatter
 from utils.metrics import MetricsService
 from utils.logger import get_logger
 
+
 logger = get_logger(__name__)
 
 class QueryPlanner:
@@ -19,43 +20,55 @@ class QueryPlanner:
         self.storage_manager = storage_manager
         self.metrics = MetricsService()
         self.index_interface = IndexInterface()
+        # Asegúrate de que storage_manager use la misma ruta base
+        self.data_dir = "./data"  # Agregar esta línea si no existe
         
-    async def execute_query(self, query: str, user_id: int) -> QueryResponse:
+    async def execute_query(self, query: str, user_id: int) -> Dict[str, Any]:
+        """Execute SQL query and return results"""
+        import time
+        
         start_time = time.time()
-        initial_io = self.storage_manager.get_io_operations()
         
         try:
-            # Parse query
-            parsed_query = self._parse_query(query.strip())
+            print(f"=== EXECUTE QUERY DEBUG ===")
+            print(f"Query: {query}")
+            print(f"User ID: {user_id}")
+            
+            # Parse the query
+            parsed_query = self._parse_query(query)
+            print(f"Parsed query: {parsed_query}")
             
             # Execute based on query type
             if parsed_query["type"] == "SELECT":
                 result = await self._execute_select(parsed_query, user_id)
             elif parsed_query["type"] == "INSERT":
                 result = await self._execute_insert(parsed_query, user_id)
-            elif parsed_query["type"] == "DELETE":
-                result = await self._execute_delete(parsed_query, user_id)
             elif parsed_query["type"] == "UPDATE":
                 result = await self._execute_update(parsed_query, user_id)
+            elif parsed_query["type"] == "DELETE":
+                result = await self._execute_delete(parsed_query, user_id)
             else:
                 raise ValueError(f"Unsupported query type: {parsed_query['type']}")
             
+            # Calculate execution time
             execution_time = (time.time() - start_time) * 1000
-            io_operations = self.storage_manager.get_io_operations() - initial_io
             
-            await self.metrics.record_query(execution_time, io_operations)
+            # Add metadata to result
+            if isinstance(result, dict):
+                result["execution_time_ms"] = execution_time
+            else:
+                result = {
+                    "data": result,
+                    "execution_time_ms": execution_time
+                }
             
-            return ResponseFormatter.format_query_response(
-                columns=result["columns"],
-                data=result["data"],
-                execution_time=execution_time,
-                io_operations=io_operations,
-                page=result.get("page", 1)
-            )
+            print(f"Final result: {result}")
+            print(f"=== END EXECUTE QUERY DEBUG ===")
+            
+            return result
             
         except Exception as e:
-            logger.error(f"Query execution failed: {str(e)}")
-            execution_time = (time.time() - start_time) * 1000
+            print(f"Error executing query: {str(e)}")
             raise ValueError(f"Query execution failed: {str(e)}")
     
     def _parse_query(self, query: str) -> Dict[str, Any]:
@@ -73,29 +86,66 @@ class QueryPlanner:
             raise ValueError("Unsupported query type")
     
     def _parse_select(self, query: str) -> Dict[str, Any]:
-        # Basic SELECT parser
-        # SELECT columns FROM table WHERE conditions ORDER BY column LIMIT n
+        # Remove SELECT keyword and normalize
+        query_without_select = query[6:].strip()  # Remove "SELECT"
         
-        select_pattern = r"SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+?))?(?:\s+ORDER\s+BY\s+(.+?))?(?:\s+LIMIT\s+(\d+))?"
-        match = re.match(select_pattern, query, re.IGNORECASE | re.DOTALL)
+        print(f"=== PARSE SELECT DEBUG ===")
+        print(f"Original query: {query}")
+        print(f"Query without SELECT: {query_without_select}")
         
-        if not match:
-            raise ValueError("Invalid SELECT syntax")
+        # Find FROM clause
+        from_match = re.search(r'\bFROM\s+(\w+)', query_without_select, re.IGNORECASE)
+        if not from_match:
+            raise ValueError("Missing FROM clause in SELECT statement")
         
-        columns_str, table, where_clause, order_by, limit = match.groups()
+        table_name = from_match.group(1).lower()
+        print(f"Table name: {table_name}")
         
-        columns = [col.strip() for col in columns_str.split(",")] if columns_str != "*" else ["*"]
+        # Extract column list (everything before FROM)
+        columns_part = query_without_select[:from_match.start()].strip()
+        if columns_part == "*":
+            columns = ["*"]
+        else:
+            columns = [col.strip().lower() for col in columns_part.split(",")]
         
-        parsed = {
+        print(f"Columns: {columns}")
+        
+        # Parse optional clauses (WHERE, ORDER BY, LIMIT)
+        remaining_query = query_without_select[from_match.end():].strip()
+        
+        where_conditions = None
+        order_by = None
+        limit = None
+        
+        if remaining_query:
+            # Parse WHERE clause
+            where_match = re.search(r'\bWHERE\s+(.+?)(?:\s+ORDER\s+BY|\s+LIMIT|$)', remaining_query, re.IGNORECASE)
+            if where_match:
+                where_conditions = self._parse_where_clause(where_match.group(1))
+            
+            # Parse ORDER BY clause
+            order_match = re.search(r'\bORDER\s+BY\s+(\w+)', remaining_query, re.IGNORECASE)
+            if order_match:
+                order_by = order_match.group(1).lower()
+            
+            # Parse LIMIT clause
+            limit_match = re.search(r'\bLIMIT\s+(\d+)', remaining_query, re.IGNORECASE)
+            if limit_match:
+                limit = int(limit_match.group(1))
+        
+        result = {
             "type": "SELECT",
+            "table": table_name,
             "columns": columns,
-            "table": table.lower(),
-            "where": self._parse_where_clause(where_clause) if where_clause else None,
-            "order_by": order_by.strip() if order_by else None,
-            "limit": int(limit) if limit else None
+            "where": where_conditions,
+            "order_by": order_by,
+            "limit": limit
         }
         
-        return parsed
+        print(f"Parsed result: {result}")
+        print(f"=== END PARSE SELECT DEBUG ===")
+        
+        return result
     
     def _parse_where_clause(self, where_clause: str) -> List[Dict[str, Any]]:
         # Simple WHERE parser for conditions like: column = value, column > value, etc.
@@ -195,51 +245,44 @@ class QueryPlanner:
             "where": self._parse_where_clause(where_clause) if where_clause else None
         }
     
-    async def _execute_select(self, parsed_query: Dict[str, Any], user_id: int) -> Dict[str, Any]:
-        table_name = parsed_query["table"]
-        table_metadata = self.catalog.get_table_metadata(table_name, user_id)
+
+
+    async def _load_table_data(self, file_path: str) -> List[List]:
+    
+    
+        print(f"=== LOADING TABLE DATA ===")
+        print(f"File: {file_path}")
         
-        if not table_metadata:
-            raise ValueError(f"Table {table_name} not found")
-        
-        # Load table data
-        data_file_path = os.path.join(self.storage_manager.data_dir, table_metadata["data_file"])
-        table_data = await self._load_table_data(data_file_path)
-        
-        # Apply WHERE conditions
-        if parsed_query["where"]:
-            table_data = await self._apply_where_conditions(
-                table_data, parsed_query["where"], table_metadata, user_id
-            )
-        
-        # Select columns
-        columns = [col["name"] for col in table_metadata["columns"]]
-        if parsed_query["columns"] != ["*"]:
-            column_indices = []
-            for col_name in parsed_query["columns"]:
-                try:
-                    column_indices.append(columns.index(col_name))
-                except ValueError:
-                    raise ValueError(f"Column {col_name} not found")
+        try:
+            # Leer el archivo completo de una vez
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                print(f"Raw content preview: {content[:200]}...")
+                
+                # Parsear el contenido completo como JSON
+                data = json.loads(content)
+                print(f"Parsed JSON type: {type(data)}")
+                
+                if not isinstance(data, list):
+                    raise ValueError(f"Expected JSON array, got {type(data)}")
+                    
+                # Verificar estructura
+                print(f"Number of rows: {len(data)}")
+                for i, row in enumerate(data[:3]):
+                    print(f"Row {i}: {row}")
+                
+                return data
+                
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error: {str(e)}")
+            print(f"Content that failed to parse: {content[:500]}")
+            raise ValueError(f"Failed to parse JSON data: {str(e)}")
             
-            columns = parsed_query["columns"]
-            table_data = [[row[i] for i in column_indices] for row in table_data]
-        
-        # Apply ORDER BY
-        if parsed_query["order_by"]:
-            order_column = parsed_query["order_by"]
-            if order_column in columns:
-                col_index = columns.index(order_column)
-                table_data.sort(key=lambda row: row[col_index] if row[col_index] is not None else "")
-        
-        # Apply LIMIT
-        if parsed_query["limit"]:
-            table_data = table_data[:parsed_query["limit"]]
-        
-        return {
-            "columns": columns,
-            "data": table_data
-        }
+        except Exception as e:
+            print(f"Error loading table data: {str(e)}")
+            raise ValueError(f"Failed to load table data: {str(e)}")
+    
+    
     
     async def _apply_where_conditions(
         self, data: List[List[Any]], conditions: List[Dict[str, Any]], 
@@ -323,28 +366,38 @@ class QueryPlanner:
         # For now, fall back to regular evaluation
         return True
     
-    async def _load_table_data(self, file_path: str) -> List[List[Any]]:
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return data
-        except Exception as e:
-            logger.error(f"Failed to load table data from {file_path}: {str(e)}")
-            raise ValueError(f"Failed to load table data: {str(e)}")
     
-    async def get_table_data(self, table_name: str, page: int, user_id: int) -> PaginatedDataResponse:
+
+    async def get_table_data(self, table_name: str, page: int, user_id: int) -> dict:
         table_metadata = self.catalog.get_table_metadata(table_name, user_id)
-        
         if not table_metadata:
             raise ValueError(f"Table {table_name} not found")
         
-        # Load table data
-        data_file_path = os.path.join(self.storage_manager.data_dir, table_metadata["data_file"])
+        data_file_path = table_metadata.get("data_file")
+        if not data_file_path or not os.path.exists(data_file_path):
+            raise ValueError(f"Data file not found for table {table_name}")
+        
         table_data = await self._load_table_data(data_file_path)
         
-        columns = [col["name"] for col in table_metadata["columns"]]
+        # Paginate results
+        page_size = 50
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_data = table_data[start_idx:end_idx]
         
-        return ResponseFormatter.format_table_data(columns, table_data, page)
+        # Convertir columnas a formato correcto
+        column_names = [col["name"] for col in table_metadata["columns"]]
+        
+        return {
+            "data": paginated_data,
+            "columns": column_names,
+            "total_pages": (len(table_data) + page_size - 1) // page_size,
+            "current_page": page,
+            "total_rows": len(table_data),
+            "page_size": page_size
+        }
+
+    
     
     async def _execute_insert(self, parsed_query: Dict[str, Any], user_id: int) -> Dict[str, Any]:
         # Placeholder for INSERT implementation
@@ -366,3 +419,79 @@ class QueryPlanner:
             "columns": ["message"],
             "data": [["UPDATE not yet implemented"]]
         }
+    
+    async def _execute_select(self, parsed_query: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+        """Execute SELECT query"""
+        table_name = parsed_query["table"]
+        requested_columns = parsed_query["columns"]
+        where_conditions = parsed_query.get("where")
+        order_by = parsed_query.get("order_by")
+        limit = parsed_query.get("limit")
+        
+        # Get table metadata
+        table_metadata = self.catalog.get_table_metadata(table_name, user_id)
+        if not table_metadata:
+            raise ValueError(f"Table {table_name} not found")
+        
+        # Get data file path
+        data_file_path = table_metadata.get("data_file")
+        if not data_file_path or not os.path.exists(data_file_path):
+            raise ValueError(f"Data file not found for table {table_name}")
+        
+        # Load table data
+        table_data = await self._load_table_data(data_file_path)
+        
+        # Get column names from metadata
+        all_columns = [col["name"] for col in table_metadata["columns"]]
+        
+        # Determine which columns to select
+        if requested_columns == ["*"]:
+            selected_columns = all_columns
+            column_indices = list(range(len(all_columns)))
+        else:
+            selected_columns = []
+            column_indices = []
+            for col in requested_columns:
+                col = col.strip().lower()
+                if col in all_columns:
+                    selected_columns.append(col)
+                    column_indices.append(all_columns.index(col))
+                else:
+                    raise ValueError(f"Column {col} not found in table {table_name}")
+        
+        # Apply WHERE conditions if present
+        filtered_data = table_data
+        if where_conditions:
+            filtered_data = await self._apply_where_conditions(
+                table_data, where_conditions, table_metadata, user_id
+            )
+        
+        # Select only requested columns
+        result_data = []
+        for row in filtered_data:
+            selected_row = [row[i] for i in column_indices]
+            result_data.append(selected_row)
+        
+        # Apply ORDER BY (simplified implementation)
+        if order_by:
+            order_column = order_by.strip().lower()
+            if order_column in selected_columns:
+                order_index = selected_columns.index(order_column)
+                result_data.sort(key=lambda x: x[order_index] if x[order_index] is not None else "")
+        
+        # Apply LIMIT
+        if limit:
+            result_data = result_data[:limit]
+        
+        # Preparar respuesta con todos los campos requeridos
+        return {
+            "columns": selected_columns,
+            "data": result_data,
+            "page": 1,
+            "total_pages": 1,
+            "current_page": 1,
+            "rows_affected": len(result_data),
+            "io_operations": 1
+        }
+
+

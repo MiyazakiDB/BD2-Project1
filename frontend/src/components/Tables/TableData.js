@@ -1,108 +1,190 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Alert, Pagination, Card, Button } from 'react-bootstrap';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { Table, Alert, Pagination, Button, Spinner } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import { tableService } from '../../services/api';
 
 const TableData = () => {
   const { tableName } = useParams();
-  const navigate = useNavigate();
-  
-  const [data, setData] = useState({ columns: [], rows: [], total_pages: 0 });
+  const [data, setData] = useState([]);
+  const [columns, setColumns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRows, setTotalRows] = useState(0);
 
-  useEffect(() => {
-    fetchTableData(currentPage);
-  }, [tableName, currentPage]);
-
-  const fetchTableData = async (page) => {
+  const fetchTableData = async (page = 1) => {
     try {
       setLoading(true);
+      setError('');
+      
       const response = await tableService.getTableData(tableName, page);
-      setData(response.data);
+      
+      console.log('=== FRONTEND DEBUG ===');
+      console.log('Raw response:', response);
+      console.log('Response data:', response.data);
+      console.log('Response columns:', response.columns);
+      console.log('Sample row:', response.data && response.data[0]);
+      console.log('=== END DEBUG ===');
+      
+      // Validar que la respuesta tenga la estructura correcta
+      if (response && typeof response === 'object') {
+        const tableData = response.data || [];
+        const tableColumns = response.columns || [];
+        
+        console.log('Setting data:', tableData);
+        console.log('Setting columns:', tableColumns);
+        
+        setData(tableData);
+        setColumns(tableColumns);
+        setCurrentPage(response.current_page || 1);
+        setTotalPages(response.total_pages || 1);
+        setTotalRows(response.total_rows || 0);
+      } else {
+        throw new Error('Invalid response format');
+      }
     } catch (err) {
-      setError('Error loading table data. Please try again.');
-      console.error(err);
+      console.error('Error fetching table data:', err);
+      setError(`Error loading table data: ${err.message}`);
+      // Asegurar que los estados tengan valores por defecto
+      setData([]);
+      setColumns([]);
+      setCurrentPage(1);
+      setTotalPages(1);
+      setTotalRows(0);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (tableName) {
+      fetchTableData(1);
+    }
+  }, [tableName]);
+
   const handlePageChange = (page) => {
     setCurrentPage(page);
+    fetchTableData(page);
   };
 
-  const renderPagination = () => {
-    if (data.total_pages <= 1) return null;
-
-    let items = [];
-    for (let number = 1; number <= data.total_pages; number++) {
-      items.push(
-        <Pagination.Item 
-          key={number} 
-          active={number === currentPage}
-          onClick={() => handlePageChange(number)}
-        >
-          {number}
-        </Pagination.Item>
-      );
-    }
-
+  if (loading) {
     return (
-      <Pagination className="mt-3 justify-content-center">
-        <Pagination.First onClick={() => handlePageChange(1)} disabled={currentPage === 1} />
-        <Pagination.Prev onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} />
-        {items}
-        <Pagination.Next onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === data.total_pages} />
-        <Pagination.Last onClick={() => handlePageChange(data.total_pages)} disabled={currentPage === data.total_pages} />
-      </Pagination>
+      <div className="text-center mt-5">
+        <Spinner animation="border" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </Spinner>
+        <p className="mt-2">Loading table data...</p>
+      </div>
     );
-  };
-
-  if (loading && currentPage === 1) {
-    return <div className="text-center mt-5">Loading table data...</div>;
   }
 
   return (
     <div className="mt-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>Table: {tableName}</h2>
-        <Button variant="secondary" onClick={() => navigate('/tables')}>
-          Back to Tables
-        </Button>
+        <div>
+          <Button as={Link} to="/tables" variant="secondary" className="me-2">
+            Back to Tables
+          </Button>
+          <Button as={Link} to="/query" variant="primary">
+            Query Table
+          </Button>
+        </div>
       </div>
-      
+
       {error && <Alert variant="danger">{error}</Alert>}
-      
-      {data.rows.length === 0 ? (
-        <Alert variant="info">This table is empty.</Alert>
-      ) : (
-        <Card>
-          <Card.Body>
-            <div className="table-responsive">
-              <Table striped bordered hover>
-                <thead>
+
+      {!error && (
+        <>
+          <div className="mb-3">
+            <p className="text-muted">
+              Showing {((currentPage - 1) * 50) + 1} to {Math.min(currentPage * 50, totalRows)} of {totalRows} rows
+            </p>
+          </div>
+
+          {data && data.length > 0 ? (
+            <>
+              <Table striped bordered hover responsive>
+                <thead className="table-dark">
                   <tr>
-                    {data.columns.map((column, index) => (
-                      <th key={index}>{column}</th>
-                    ))}
+                    {columns && columns.length > 0 ? (
+                      columns.map((column, index) => (
+                        <th key={index}>{column}</th>
+                      ))
+                    ) : (
+                      <th>No columns defined</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {data.rows.map((row, rowIndex) => (
-                    <tr key={rowIndex}>
-                      {data.columns.map((column, colIndex) => (
-                        <td key={colIndex}>{row[column] !== null ? String(row[column]) : 'NULL'}</td>
-                      ))}
-                    </tr>
-                  ))}
+                  {data.map((row, rowIndex) => {
+                    console.log(`Rendering row ${rowIndex}:`, row); // Debug
+                    return (
+                      <tr key={rowIndex}>
+                        {Array.isArray(row) ? (
+                          row.map((cell, cellIndex) => {
+                            const cellValue = cell !== null && cell !== undefined ? String(cell) : '';
+                            console.log(`Cell [${rowIndex}][${cellIndex}]:`, cell, '-> displayed as:', cellValue); // Debug
+                            return (
+                              <td key={cellIndex}>
+                                {cellValue}
+                              </td>
+                            );
+                          })
+                        ) : (
+                          <td colSpan={columns.length || 1}>
+                            Invalid row data: {typeof row} - {JSON.stringify(row)}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </Table>
-            </div>
-            {renderPagination()}
-          </Card.Body>
-        </Card>
+
+              {totalPages > 1 && (
+                <div className="d-flex justify-content-center mt-4">
+                  <Pagination>
+                    <Pagination.First 
+                      onClick={() => handlePageChange(1)}
+                      disabled={currentPage === 1}
+                    />
+                    <Pagination.Prev 
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                    />
+                    
+                    {[...Array(Math.min(totalPages, 10))].map((_, index) => {
+                      const page = index + 1;
+                      return (
+                        <Pagination.Item
+                          key={page}
+                          active={page === currentPage}
+                          onClick={() => handlePageChange(page)}
+                        >
+                          {page}
+                        </Pagination.Item>
+                      );
+                    })}
+                    
+                    <Pagination.Next 
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                    />
+                    <Pagination.Last 
+                      onClick={() => handlePageChange(totalPages)}
+                      disabled={currentPage === totalPages}
+                    />
+                  </Pagination>
+                </div>
+              )}
+            </>
+          ) : (
+            <Alert variant="info">No data found in this table.</Alert>
+          )}
+        </>
       )}
     </div>
   );

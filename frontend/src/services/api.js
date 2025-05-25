@@ -74,12 +74,23 @@ export const tableService = {
   createTable: (tableData) => api.post('/tables/create', tableData),
   listTables: () => api.get('/tables'),
   deleteTable: (tableName) => api.delete(`/tables/${tableName}`),
-  getTableData: (tableName, page = 1) => api.get(`/tables/${tableName}/data?page=${page}`),
+  async getTableData(tableName, page = 1) {
+    try {
+      const response = await api.get(`/tables/${tableName}/data?page=${page}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching table data:', error);
+      throw error;
+    }
+  },
 };
 
 // Servicio de consultas
 export const queryService = {
-  executeQuery: (query) => api.post('/query', { query }),
+  executeQuery: async (query) => {
+    const response = await api.post('/query', { query });
+    return response.data; // Devolver directamente response.data
+  },
 };
 
 // Servicio de métricas

@@ -83,12 +83,12 @@ class QueryResponse(BaseModel):
     current_page: int
 
 class PaginatedDataResponse(BaseModel):
-    columns: List[str]
     data: List[List[Any]]
-    total_rows: int
-    current_page: int
+    columns: List[str]  # Debe ser lista de strings, no objetos
     total_pages: int
-    page_size: int
+    current_page: int
+    total_rows: int
+    page_size: int  # Agregar este campo
 
 # Metrics schemas
 class MetricsResponse(BaseModel):

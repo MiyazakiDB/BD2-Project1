@@ -1,7 +1,7 @@
 {
   "tables": {
-    "12_ty": {
-      "name": "ty",
+    "12_kl": {
+      "name": "kl",
       "user_id": 12,
       "file_path": "backend/uploads\\ejemplo2.txt",
       "columns": [
@@ -25,8 +25,37 @@
         }
       ],
       "row_count": 1,
-      "created_at": "2025-05-25T12:14:01.282748",
-      "data_file": "12_ty.dat",
+      "created_at": "2025-05-25T12:30:04.413078",
+      "data_file": "C:\\Users\\tokio\\OneDrive\\Escritorio\\BD2-Project1\\backend\\data\\12\\12_kl.dat",
+      "indices": {}
+    },
+    "10_gy": {
+      "name": "gy",
+      "user_id": 10,
+      "file_path": "backend/uploads\\ejemplo2.txt",
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "INT",
+          "size": null,
+          "index_type": null
+        },
+        {
+          "name": "nombre",
+          "data_type": "VARCHAR",
+          "size": 255,
+          "index_type": null
+        },
+        {
+          "name": "edad",
+          "data_type": "INT",
+          "size": null,
+          "index_type": null
+        }
+      ],
+      "row_count": 3,
+      "created_at": "2025-05-25T14:06:47.068480",
+      "data_file": "C:\\Users\\tokio\\OneDrive\\Escritorio\\BD2-Project1\\backend\\data\\10\\10_gy.dat",
       "indices": {}
     }
   },

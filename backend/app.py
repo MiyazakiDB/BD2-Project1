@@ -134,13 +134,46 @@ async def delete_table(
 ):
     return await catalog.delete_table(table_name, current_user["user_id"])
 
-@api_router.get("/tables/{table_name}/data", response_model=PaginatedDataResponse)
+@api_router.get("/tables/{table_name}/data")
 async def get_table_data(
     table_name: str,
     page: int = Query(1, ge=1),
     current_user: dict = Depends(get_current_user)
 ):
-    return await query_planner.get_table_data(table_name, page, current_user["user_id"])
+    try:
+        result = await query_planner.get_table_data(table_name, page, current_user["user_id"])
+        
+        print(f"=== ENDPOINT DEBUG ===")
+        print(f"Result type: {type(result)}")
+        print(f"Result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+        
+        data = result.get('data', [])
+        print(f"Data type: {type(data)}")
+        print(f"Data length: {len(data) if isinstance(data, list) else 'Not a list'}")
+        
+        print(f"First 3 rows being sent to frontend:")
+        for i, row in enumerate(data[:3]):
+            print(f"  Row {i}: {row} (type: {type(row)}, length: {len(row) if isinstance(row, list) else 'N/A'})")
+        
+        columns = result.get('columns', [])
+        print(f"Columns: {columns}")
+        print(f"=== END ENDPOINT DEBUG ===")
+        
+        # Asegurar que la respuesta tenga el formato correcto
+        formatted_result = {
+            "data": data,
+            "columns": columns,
+            "total_pages": result.get("total_pages", 1),
+            "current_page": result.get("current_page", 1),
+            "total_rows": result.get("total_rows", 0),
+            "page_size": result.get("page_size", 50)
+        }
+        
+        return formatted_result
+        
+    except Exception as e:
+        print(f"Error in get_table_data endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Query execution endpoint
 @api_router.post("/query", response_model=QueryResponse)
@@ -148,7 +181,37 @@ async def execute_query(
     query_data: QueryRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    return await query_planner.execute_query(query_data.query, current_user["user_id"])
+    try:
+        print(f"=== QUERY ENDPOINT DEBUG ===")
+        print(f"Query: {query_data.query}")
+        print(f"User ID: {current_user['user_id']}")
+        
+        result = await query_planner.execute_query(query_data.query, current_user["user_id"])
+        
+        print(f"Query result type: {type(result)}")
+        print(f"Query result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+        print(f"Query result: {result}")
+        
+        # Asegurar formato correcto para el modelo QueryResponse
+        formatted_result = {
+            "columns": result.get("columns", []),
+            "data": result.get("data", []),
+            "execution_time_ms": result.get("execution_time_ms", 0),
+            "page": result.get("page", 1),
+            "total_pages": result.get("total_pages", 1),  # Agregar campo faltante
+            "current_page": result.get("current_page", result.get("page", 1)),  # Agregar campo faltante
+            "rows_affected": len(result.get("data", [])),  # Agregar campo faltante
+            "io_operations": result.get("io_operations", 1)  # Agregar campo faltante
+        }
+        
+        print(f"Formatted result: {formatted_result}")
+        print(f"=== END QUERY ENDPOINT DEBUG ===")
+        
+        return formatted_result
+        
+    except Exception as e:
+        print(f"Error in query endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Metrics endpoint
 @api_router.get("/metrics", response_model=MetricsResponse)

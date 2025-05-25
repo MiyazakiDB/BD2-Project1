@@ -12,10 +12,21 @@ const TableList = () => {
     try {
       setLoading(true);
       const response = await tableService.listTables();
-      setTables(response.data);
+      
+      // Validar que la respuesta tenga la estructura correcta
+      console.log('Response from API:', response); // Debug
+      
+      const tableData = response.data || response || [];
+      if (Array.isArray(tableData)) {
+        setTables(tableData);
+      } else {
+        console.error('Invalid response format:', response);
+        setTables([]);
+        setError('Invalid data format received from server');
+      }
     } catch (err) {
       setError('Error loading tables. Please try again.');
-      console.error(err);
+      console.error('Error fetching tables:', err);
     } finally {
       setLoading(false);
     }
@@ -58,6 +69,7 @@ const TableList = () => {
             <tr>
               <th>Table Name</th>
               <th>Columns</th>
+              <th>Row Count</th>
               <th>Created Date</th>
               <th>Actions</th>
             </tr>
@@ -66,7 +78,8 @@ const TableList = () => {
             {tables.map((table) => (
               <tr key={table.name}>
                 <td>{table.name}</td>
-                <td>{table.columns.length}</td>
+                <td>{table.columns?.length || 0}</td>
+                <td>{table.row_count || 0}</td>
                 <td>{new Date(table.created_at).toLocaleString()}</td>
                 <td>
                   <Button 

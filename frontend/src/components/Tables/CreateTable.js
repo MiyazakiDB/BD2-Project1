@@ -50,7 +50,7 @@ const CreateTable = () => {
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('table_name', tableName);
-    formData.append('has_headers', hasHeaders.toString()); // Agregar información de encabezados
+    formData.append('has_headers', hasHeaders.toString()); // Enviar información de encabezados
     formData.append(
       'columns',
       JSON.stringify(
