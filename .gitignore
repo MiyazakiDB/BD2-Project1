@@ -83,3 +83,6 @@ data/
 
 # Also exclude any user-specific data
 /data/file_metadata.json
+
+backend/catalog.json
+backend/users.db

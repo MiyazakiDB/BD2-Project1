@@ -44,28 +44,31 @@ async def startup_event():
     await catalog.initialize()
     await storage_manager.initialize()
 
+# API Router with prefix
+api_router = FastAPI()
+
 # Auth endpoints
-@app.post("/auth/register", response_model=AuthResponse)
+@api_router.post("/auth/register", response_model=AuthResponse)
 async def register(user_data: UserRegister):
     return await auth_service.register(user_data)
 
-@app.post("/auth/login", response_model=AuthResponse)
+@api_router.post("/auth/login", response_model=AuthResponse)
 async def login(user_data: UserLogin):
     return await auth_service.login(user_data)
 
 # File management endpoints
-@app.post("/files/upload", response_model=FileUploadResponse)
+@api_router.post("/files/upload", response_model=FileUploadResponse)
 async def upload_file(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user)
 ):
     return await storage_manager.upload_file(file, current_user["user_id"])
 
-@app.get("/files", response_model=List[FileInfo])
+@api_router.get("/files", response_model=List[FileInfo])
 async def list_files(current_user: dict = Depends(get_current_user)):
     return await storage_manager.list_user_files(current_user["user_id"])
 
-@app.delete("/files/{filename}")
+@api_router.delete("/files/{filename}")
 async def delete_file(
     filename: str,
     current_user: dict = Depends(get_current_user)
@@ -73,25 +76,25 @@ async def delete_file(
     return await storage_manager.delete_file(filename, current_user["user_id"])
 
 # Table management endpoints
-@app.post("/tables/create", response_model=TableResponse)
+@api_router.post("/tables/create", response_model=TableResponse)
 async def create_table(
     table_data: CreateTableRequest,
     current_user: dict = Depends(get_current_user)
 ):
     return await catalog.create_table(table_data, current_user["user_id"])
 
-@app.get("/tables", response_model=List[TableInfo])
+@api_router.get("/tables", response_model=List[TableInfo])
 async def list_tables(current_user: dict = Depends(get_current_user)):
     return await catalog.list_user_tables(current_user["user_id"])
 
-@app.delete("/tables/{table_name}")
+@api_router.delete("/tables/{table_name}")
 async def delete_table(
     table_name: str,
     current_user: dict = Depends(get_current_user)
 ):
     return await catalog.delete_table(table_name, current_user["user_id"])
 
-@app.get("/tables/{table_name}/data", response_model=PaginatedDataResponse)
+@api_router.get("/tables/{table_name}/data", response_model=PaginatedDataResponse)
 async def get_table_data(
     table_name: str,
     page: int = Query(1, ge=1),
@@ -100,7 +103,7 @@ async def get_table_data(
     return await query_planner.get_table_data(table_name, page, current_user["user_id"])
 
 # Query execution endpoint
-@app.post("/query", response_model=QueryResponse)
+@api_router.post("/query", response_model=QueryResponse)
 async def execute_query(
     query_data: QueryRequest,
     current_user: dict = Depends(get_current_user)
@@ -108,9 +111,12 @@ async def execute_query(
     return await query_planner.execute_query(query_data.query, current_user["user_id"])
 
 # Metrics endpoint
-@app.get("/metrics", response_model=MetricsResponse)
+@api_router.get("/metrics", response_model=MetricsResponse)
 async def get_metrics(current_user: dict = Depends(get_current_user)):
     return await metrics_service.get_user_metrics(current_user["user_id"])
+
+# Mount the API router under /api prefix
+app.mount("/api", api_router)
 
 if __name__ == "__main__":
     import uvicorn
