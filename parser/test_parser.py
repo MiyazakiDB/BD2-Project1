@@ -4,12 +4,16 @@ from pprint import pprint
 def test_parser():
     # Test cases
     test_cases = [
-        "SELECT * FROM users;",
-        "SELECT id, name FROM products WHERE price > 100;",
-        "CREATE TABLE students (id INT PRIMARY KEY, name VARCHAR(50), age INT);",
-        "INSERT INTO users (id, name, active) VALUES (1, 'John', TRUE);",
-        "DELETE FROM orders WHERE status = 'cancelled';",
-        "CREATE INDEX idx_name ON users USING BTREE (name);"
+        """CREATE TABLE ventas (
+    id INT PRIMARY KEY,
+    producto VARCHAR(50),
+    cantidad INT,
+    precio FLOAT,
+    fecha VARCHAR(20)
+);
+CREATE INDEX ventas_id_idx ON ventas USING BTREE (id);
+DROP INDEX ventas_fecha_idx;
+""",
     ]
     
     for sql in test_cases:
@@ -20,6 +24,6 @@ def test_parser():
             pprint(result)
         except Exception as e:
             print(f"Error: {e}")
-
+    
 if __name__ == "__main__":
     test_parser()
