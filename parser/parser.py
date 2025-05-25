@@ -1,12 +1,8 @@
-from .scanner import TokenType, Scanner
+from .scanner import TokenType
+from .ast import *
 
-
-class ParseError(Exception):
-    def __init__(self, token, message):
-        self.token = token
-        self.message = message
-        super().__init__(f"Error at '{token.value}': {message}")
-
+class ParserError(Exception):
+    pass
 
 class Parser:
     def __init__(self, tokens):
@@ -14,225 +10,230 @@ class Parser:
         self.current = 0
     
     def parse(self):
+        """Parse a sequence of SQL statements."""
         statements = []
+        
         while not self.is_at_end():
             statements.append(self.statement())
+            self.consume(TokenType.SEMICOLON, "Expect ';' after statement.")
+            
         return statements
     
     def statement(self):
+        """Parse a single SQL statement."""
         if self.match(TokenType.SELECT):
             return self.select_statement()
         elif self.match(TokenType.CREATE):
             if self.check(TokenType.TABLE):
+                self.advance()
                 return self.create_table_statement()
             elif self.check(TokenType.INDEX):
+                self.advance()
                 return self.create_index_statement()
+            else:
+                raise ParserError(f"Expected 'TABLE' or 'INDEX' after 'CREATE' at line {self.peek().line}")
         elif self.match(TokenType.DROP):
             if self.check(TokenType.TABLE):
+                self.advance()
                 return self.drop_table_statement()
             elif self.check(TokenType.INDEX):
+                self.advance()
                 return self.drop_index_statement()
+            else:
+                raise ParserError(f"Expected 'TABLE' or 'INDEX' after 'DROP' at line {self.peek().line}")
         elif self.match(TokenType.INSERT):
             return self.insert_statement()
         elif self.match(TokenType.DELETE):
             return self.delete_statement()
-        
-        raise ParseError(self.peek(), "Expected statement.")
+        else:
+            raise ParserError(f"Expected statement at line {self.peek().line}")
     
     def select_statement(self):
-        select_list = self.select_list()
-        self.consume(TokenType.FROM, "Expected 'FROM' after select list.")
-        table = self.consume(TokenType.IDENTIFIER, "Expected table name.").value
+        columns = self.select_list()
         
-        condition = None
+        self.consume(TokenType.FROM, "Expect 'FROM' after select columns.")
+        table_name = self.identifier()
+        
+        where_clause = None
         if self.match(TokenType.WHERE):
-            condition = self.condition()
-        
-        self.consume(TokenType.SEMICOLON, "Expected ';' after SELECT statement.")
-        
-        return {
-            "type": "SELECT",
-            "select_list": select_list,
-            "table": table,
-            "condition": condition
-        }
+            where_clause = self.condition()
+            
+        return SelectStmt(columns, table_name, where_clause)
     
     def select_list(self):
         if self.match(TokenType.ASTERISK):
             return ["*"]
+            
+        columns = []
+        columns.append(self.identifier())
         
-        columns = [self.consume(TokenType.IDENTIFIER, "Expected column name.").value]
         while self.match(TokenType.COMMA):
-            columns.append(self.consume(TokenType.IDENTIFIER, "Expected column name.").value)
-        
+            columns.append(self.identifier())
+            
         return columns
     
     def create_table_statement(self):
-        self.consume(TokenType.TABLE, "Expected 'TABLE' keyword.")
-        table_name = self.consume(TokenType.IDENTIFIER, "Expected table name.").value
+        table_name = self.identifier()
         
-        self.consume(TokenType.LEFT_PAREN, "Expected '(' after table name.")
+        self.consume(TokenType.LPAREN, "Expect '(' after table name.")
         columns = self.column_def_list()
-        self.consume(TokenType.RIGHT_PAREN, "Expected ')' after column definitions.")
-        self.consume(TokenType.SEMICOLON, "Expected ';' after CREATE TABLE statement.")
+        self.consume(TokenType.RPAREN, "Expect ')' after column definitions.")
         
-        return {
-            "type": "CREATE_TABLE",
-            "table_name": table_name,
-            "columns": columns
-        }
+        return CreateTableStmt(table_name, columns)
     
     def column_def_list(self):
-        columns = [self.column_def()]
+        columns = []
+        columns.append(self.column_def())
+        
         while self.match(TokenType.COMMA):
             columns.append(self.column_def())
-        
+            
         return columns
     
     def column_def(self):
-        column_name = self.consume(TokenType.IDENTIFIER, "Expected column name.").value
+        name = self.identifier()
         data_type = self.data_type()
         
         primary_key = False
-        if self.match(TokenType.PRIMARY):
-            self.consume(TokenType.KEY, "Expected 'KEY' after 'PRIMARY'.")
-            primary_key = True
+        index_type = None
         
-        return {
-            "name": column_name,
-            "data_type": data_type,
-            "primary_key": primary_key
-        }
+        if self.match(TokenType.PRIMARY):
+            self.consume(TokenType.KEY, "Expect 'KEY' after 'PRIMARY'.")
+            primary_key = True
+            
+        if self.match(TokenType.INDEX):
+            index_type = self.index_type()
+            
+        return ColumnDef(name, data_type, primary_key, index_type)
     
     def data_type(self):
         if self.match(TokenType.INT):
-            return {"type": "INT"}
+            return DataType("INT")
         elif self.match(TokenType.FLOAT):
-            return {"type": "FLOAT"}
+            return DataType("FLOAT")
         elif self.match(TokenType.VARCHAR):
-            self.consume(TokenType.LEFT_PAREN, "Expected '(' after VARCHAR.")
-            size = self.consume(TokenType.NUMBER, "Expected size for VARCHAR.").value
-            self.consume(TokenType.RIGHT_PAREN, "Expected ')' after VARCHAR size.")
-            return {"type": "VARCHAR", "size": size}
+            self.consume(TokenType.LPAREN, "Expect '(' after VARCHAR.")
+            size = self.consume(TokenType.NUMBER, "Expect number for VARCHAR size.").literal
+            self.consume(TokenType.RPAREN, "Expect ')' after VARCHAR size.")
+            return DataType("VARCHAR", [size])
         elif self.match(TokenType.BOOLEAN):
-            return {"type": "BOOLEAN"}
+            return DataType("BOOLEAN")
+        elif self.match(TokenType.DATE):
+            return DataType("DATE")
+        elif self.match(TokenType.ARRAY):
+            self.consume(TokenType.LBRACKET, "Expect '[' after ARRAY.")
+            element_type = self.data_type()
+            self.consume(TokenType.RBRACKET, "Expect ']' after array element type.")
+            return DataType("ARRAY", [element_type])
         else:
-            raise ParseError(self.peek(), "Expected data type.")
+            raise ParserError(f"Expected data type at line {self.peek().line}")
     
-    def drop_table_statement(self):
-        self.consume(TokenType.TABLE, "Expected 'TABLE' keyword.")
-        table_name = self.consume(TokenType.IDENTIFIER, "Expected table name.").value
-        self.consume(TokenType.SEMICOLON, "Expected ';' after DROP TABLE statement.")
-        
-        return {
-            "type": "DROP_TABLE",
-            "table_name": table_name
-        }
-    
-    def insert_statement(self):
-        self.consume(TokenType.INTO, "Expected 'INTO' after INSERT.")
-        table_name = self.consume(TokenType.IDENTIFIER, "Expected table name.").value
-        
-        columns = None
-        if self.match(TokenType.LEFT_PAREN):
-            columns = self.column_list()
-            self.consume(TokenType.RIGHT_PAREN, "Expected ')' after column list.")
-        
-        self.consume(TokenType.VALUES, "Expected 'VALUES' keyword.")
-        self.consume(TokenType.LEFT_PAREN, "Expected '(' after VALUES.")
-        values = self.value_list()
-        self.consume(TokenType.RIGHT_PAREN, "Expected ')' after value list.")
-        self.consume(TokenType.SEMICOLON, "Expected ';' after INSERT statement.")
-        
-        return {
-            "type": "INSERT",
-            "table_name": table_name,
-            "columns": columns,
-            "values": values
-        }
-    
-    def column_list(self):
-        columns = [self.consume(TokenType.IDENTIFIER, "Expected column name.").value]
-        while self.match(TokenType.COMMA):
-            columns.append(self.consume(TokenType.IDENTIFIER, "Expected column name.").value)
-        
-        return columns
-    
-    def value_list(self):
-        values = [self.value()]
-        while self.match(TokenType.COMMA):
-            values.append(self.value())
-        
-        return values
-    
-    def value(self):
-        if self.match(TokenType.STRING):
-            return {"type": "STRING", "value": self.previous().value}
-        elif self.match(TokenType.NUMBER):
-            return {"type": "NUMBER", "value": self.previous().value}
-        elif self.match(TokenType.TRUE):
-            return {"type": "BOOLEAN", "value": True}
-        elif self.match(TokenType.FALSE):
-            return {"type": "BOOLEAN", "value": False}
+    def index_type(self):
+        if self.match(TokenType.AVL):
+            return "AVL"
+        elif self.match(TokenType.ISAM):
+            return "ISAM"
+        elif self.match(TokenType.HASH):
+            return "HASH"
+        elif self.match(TokenType.BTREE):
+            return "BTREE"
+        elif self.match(TokenType.RTREE):
+            return "RTREE"
+        elif self.match(TokenType.GIN):
+            return "GIN"
+        elif self.match(TokenType.IVF):
+            return "IVF"
+        elif self.match(TokenType.ISH):
+            return "ISH"
         else:
-            raise ParseError(self.peek(), "Expected value.")
-    
-    def delete_statement(self):
-        self.consume(TokenType.FROM, "Expected 'FROM' after DELETE.")
-        table_name = self.consume(TokenType.IDENTIFIER, "Expected table name.").value
-        
-        condition = None
-        if self.match(TokenType.WHERE):
-            condition = self.condition()
-        
-        self.consume(TokenType.SEMICOLON, "Expected ';' after DELETE statement.")
-        
-        return {
-            "type": "DELETE",
-            "table_name": table_name,
-            "condition": condition
-        }
-    
+            raise ParserError(f"Expected index type at line {self.peek().line}")
+
     def create_index_statement(self):
-        self.consume(TokenType.INDEX, "Expected 'INDEX' keyword.")
-        index_name = self.consume(TokenType.IDENTIFIER, "Expected index name.").value
-        self.consume(TokenType.ON, "Expected 'ON' after index name.")
-        table_name = self.consume(TokenType.IDENTIFIER, "Expected table name.").value
+        index_name = self.identifier()
+        
+        self.consume(TokenType.ON, "Expect 'ON' after index name.")
+        table_name = self.identifier()
         
         index_type = None
         if self.match(TokenType.USING):
             index_type = self.index_type()
-        
-        self.consume(TokenType.LEFT_PAREN, "Expected '(' after table name.")
+            
+        self.consume(TokenType.LPAREN, "Expect '(' before column list.")
         columns = self.column_list()
-        self.consume(TokenType.RIGHT_PAREN, "Expected ')' after column list.")
-        self.consume(TokenType.SEMICOLON, "Expected ';' after CREATE INDEX statement.")
+        self.consume(TokenType.RPAREN, "Expect ')' after column list.")
         
-        return {
-            "type": "CREATE_INDEX",
-            "index_name": index_name,
-            "table_name": table_name,
-            "index_type": index_type,
-            "columns": columns
-        }
-    
-    def index_type(self):
-        if self.match(TokenType.AVL, TokenType.ISAM, TokenType.HASH, TokenType.BTREE,
-                      TokenType.RTREE, TokenType.GIN, TokenType.IVF, TokenType.ISH):
-            return self.previous().value
-        else:
-            raise ParseError(self.peek(), "Expected index type.")
-    
+        return CreateIndexStmt(index_name, table_name, columns, index_type)
+
+    def drop_table_statement(self):
+        table_name = self.identifier()
+        return DropTableStmt(table_name)
+        
     def drop_index_statement(self):
-        self.consume(TokenType.INDEX, "Expected 'INDEX' keyword.")
-        index_name = self.consume(TokenType.IDENTIFIER, "Expected index name.").value
-        self.consume(TokenType.SEMICOLON, "Expected ';' after DROP INDEX statement.")
+        index_name = self.identifier()
+        return DropIndexStmt(index_name)
         
-        return {
-            "type": "DROP_INDEX",
-            "index_name": index_name
-        }
+    def insert_statement(self):
+        self.consume(TokenType.INTO, "Expect 'INTO' after INSERT.")
+        table_name = self.identifier()
+        
+        columns = None
+        if self.match(TokenType.LPAREN):
+            columns = self.column_list()
+            self.consume(TokenType.RPAREN, "Expect ')' after column list.")
+            
+        self.consume(TokenType.VALUES, "Expect 'VALUES' after table name or column list.")
+        self.consume(TokenType.LPAREN, "Expect '(' after 'VALUES'.")
+        values = self.value_list()
+        self.consume(TokenType.RPAREN, "Expect ')' after values.")
+        
+        return InsertStmt(table_name, columns, values)
+        
+    def delete_statement(self):
+        self.consume(TokenType.FROM, "Expect 'FROM' after DELETE.")
+        table_name = self.identifier()
+        
+        where_clause = None
+        if self.match(TokenType.WHERE):
+            where_clause = self.condition()
+            
+        return DeleteStmt(table_name, where_clause)
     
+    def column_list(self):
+        columns = []
+        columns.append(self.identifier())
+        
+        while self.match(TokenType.COMMA):
+            columns.append(self.identifier())
+            
+        return columns
+        
+    def value_list(self):
+        values = []
+        values.append(self.value())
+        
+        while self.match(TokenType.COMMA):
+            values.append(self.value())
+            
+        return values
+        
+    def value(self):
+        if self.match(TokenType.STRING):
+            return LiteralExpr(self.previous().literal)
+        elif self.match(TokenType.NUMBER):
+            return LiteralExpr(self.previous().literal)
+        elif self.match(TokenType.TRUE):
+            return LiteralExpr(True)
+        elif self.match(TokenType.FALSE):
+            return LiteralExpr(False)
+        elif self.match(TokenType.LPAREN):  # For coordinate values
+            x = self.consume(TokenType.NUMBER, "Expect number for X coordinate").literal
+            self.consume(TokenType.COMMA, "Expect ',' between X and Y coordinates")
+            y = self.consume(TokenType.NUMBER, "Expect number for Y coordinate").literal
+            self.consume(TokenType.RPAREN, "Expect ')' after coordinates")
+            return CoordinateExpr(x, y)
+        else:
+            raise ParserError(f"Expected value at line {self.peek().line}")
+
     def condition(self):
         return self.or_condition()
     
@@ -240,86 +241,73 @@ class Parser:
         expr = self.and_condition()
         
         while self.match(TokenType.OR):
+            operator = self.previous().type
             right = self.and_condition()
-            expr = {"type": "OR", "left": expr, "right": right}
-        
+            expr = BinaryExpr(expr, operator, right)
+            
         return expr
-    
+        
     def and_condition(self):
         expr = self.not_condition()
         
         while self.match(TokenType.AND):
+            operator = self.previous().type
             right = self.not_condition()
-            expr = {"type": "AND", "left": expr, "right": right}
-        
+            expr = BinaryExpr(expr, operator, right)
+            
         return expr
-    
+        
     def not_condition(self):
         if self.match(TokenType.NOT):
-            return {"type": "NOT", "operand": self.predicate()}
+            operator = self.previous().type
+            right = self.predicate()
+            return UnaryExpr(operator, right)
+        
         return self.predicate()
-    
+        
     def predicate(self):
-        if self.match(TokenType.LEFT_PAREN):
+        if self.match(TokenType.LPAREN):
             expr = self.condition()
-            self.consume(TokenType.RIGHT_PAREN, "Expected ')' after condition.")
-            return expr
-        else:
-            return self.simple_condition()
-    
+            self.consume(TokenType.RPAREN, "Expect ')' after condition.")
+            return GroupingExpr(expr)
+            
+        return self.simple_condition()
+        
     def simple_condition(self):
-        column = self.consume(TokenType.IDENTIFIER, "Expected column name.").value
+        column = self.identifier()
         
         if self.match(TokenType.BETWEEN):
-            value1 = self.value()
-            self.consume(TokenType.AND, "Expected 'AND' in BETWEEN condition.")
-            value2 = self.value()
+            lower = self.value()
+            self.consume(TokenType.AND, "Expect 'AND' in BETWEEN expression.")
+            upper = self.value()
+            return BetweenExpr(column, lower, upper)
             
-            return {
-                "type": "BETWEEN",
-                "column": column,
-                "value1": value1,
-                "value2": value2
-            }
-        
-        operator = self.operator()
-        value = self.value()
-        
-        return {
-            "type": "SIMPLE_CONDITION",
-            "column": column,
-            "operator": operator,
-            "value": value
-        }
-    
-    def operator(self):
-        if self.match(TokenType.EQUALS):
-            return "="
-        elif self.match(TokenType.NOT_EQUALS):
-            return "<>"
-        elif self.match(TokenType.LESS_THAN):
-            return "<"
-        elif self.match(TokenType.GREATER_THAN):
-            return ">"
-        elif self.match(TokenType.LESS_THAN_EQUALS):
-            return "<="
-        elif self.match(TokenType.GREATER_THAN_EQUALS):
-            return ">="
-        else:
-            raise ParseError(self.peek(), "Expected operator.")
+        elif self.match(TokenType.IN):
+            self.consume(TokenType.LPAREN, "Expect '(' after IN.")
+            values = self.value_list()
+            self.consume(TokenType.RPAREN, "Expect ')' after value list.")
+            return InExpr(column, values)
+            
+        elif self.match(TokenType.EQUAL, TokenType.NOT_EQUAL, 
+                         TokenType.LESS, TokenType.LESS_EQUAL, 
+                         TokenType.GREATER, TokenType.GREATER_EQUAL):
+            operator = self.previous().type
+            right = self.value()
+            return BinaryExpr(column, operator, right)
+            
+        raise ParserError(f"Expected condition operator at line {self.peek().line}")
 
-    # Helper methods for token handling
     def match(self, *types):
-        for token_type in types:
-            if self.check(token_type):
+        for type in types:
+            if self.check(type):
                 self.advance()
                 return True
         return False
     
-    def check(self, token_type):
+    def check(self, type):
         if self.is_at_end():
             return False
-        return self.peek().type == token_type
+        return self.peek().type == type
     
     def advance(self):
         if not self.is_at_end():
@@ -335,8 +323,11 @@ class Parser:
     def previous(self):
         return self.tokens[self.current - 1]
     
-    def consume(self, token_type, message):
-        if self.check(token_type):
+    def consume(self, type, message):
+        if self.check(type):
             return self.advance()
-        
-        raise ParseError(self.peek(), message)
+        raise ParserError(f"{message} at line {self.peek().line}")
+    
+    def identifier(self):
+        token = self.consume(TokenType.IDENTIFIER, "Expect identifier.")
+        return Identifier(token.lexeme)

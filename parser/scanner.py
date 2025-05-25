@@ -1,6 +1,4 @@
-import re
 from enum import Enum, auto
-
 
 class TokenType(Enum):
     # Keywords
@@ -8,29 +6,30 @@ class TokenType(Enum):
     FROM = auto()
     WHERE = auto()
     CREATE = auto()
-    TABLE = auto()
     DROP = auto()
+    TABLE = auto()
+    INDEX = auto()
     INSERT = auto()
+    DELETE = auto()
     INTO = auto()
     VALUES = auto()
-    DELETE = auto()
-    INDEX = auto()
-    ON = auto()
-    USING = auto()
     PRIMARY = auto()
     KEY = auto()
+    USING = auto()
     INT = auto()
     FLOAT = auto()
     VARCHAR = auto()
     BOOLEAN = auto()
+    DATE = auto()
+    ARRAY = auto()
+    ON = auto()
+    TRUE = auto()
+    FALSE = auto()
     BETWEEN = auto()
+    IN = auto()
     AND = auto()
     OR = auto()
     NOT = auto()
-    
-    # Data values
-    TRUE = auto()
-    FALSE = auto()
     
     # Index types
     AVL = auto()
@@ -45,36 +44,37 @@ class TokenType(Enum):
     # Symbols
     SEMICOLON = auto()
     COMMA = auto()
+    LPAREN = auto()
+    RPAREN = auto()
+    LBRACKET = auto()
+    RBRACKET = auto()
     ASTERISK = auto()
-    LEFT_PAREN = auto()
-    RIGHT_PAREN = auto()
     
     # Operators
     EQUALS = auto()
     NOT_EQUALS = auto()
     LESS_THAN = auto()
     GREATER_THAN = auto()
-    LESS_THAN_EQUALS = auto()
-    GREATER_THAN_EQUALS = auto()
+    LESS_EQUALS = auto()
+    GREATER_EQUALS = auto()
     
-    # Other
+    # Data
     IDENTIFIER = auto()
     NUMBER = auto()
     STRING = auto()
+    
+    # Special
     EOF = auto()
 
-
 class Token:
-    def __init__(self, token_type, value=None, position=None):
+    def __init__(self, token_type, lexeme, literal=None, line=0):
         self.type = token_type
-        self.value = value
-        self.position = position
+        self.lexeme = lexeme
+        self.literal = literal
+        self.line = line
     
-    def __str__(self):
-        if self.value:
-            return f"Token({self.type}, '{self.value}')"
-        return f"Token({self.type})"
-
+    def __repr__(self):
+        return f"Token({self.type}, '{self.lexeme}', {self.literal}, {self.line})"
 
 class Scanner:
     def __init__(self, source):
@@ -85,51 +85,53 @@ class Scanner:
         self.line = 1
         
         self.keywords = {
-            'SELECT': TokenType.SELECT,
-            'FROM': TokenType.FROM,
-            'WHERE': TokenType.WHERE,
-            'CREATE': TokenType.CREATE,
-            'TABLE': TokenType.TABLE,
-            'DROP': TokenType.DROP,
-            'INSERT': TokenType.INSERT,
-            'INTO': TokenType.INTO,
-            'VALUES': TokenType.VALUES,
-            'DELETE': TokenType.DELETE,
-            'INDEX': TokenType.INDEX,
-            'ON': TokenType.ON,
-            'USING': TokenType.USING,
-            'PRIMARY': TokenType.PRIMARY,
-            'KEY': TokenType.KEY,
-            'INT': TokenType.INT,
-            'FLOAT': TokenType.FLOAT,
-            'VARCHAR': TokenType.VARCHAR,
-            'BOOLEAN': TokenType.BOOLEAN,
-            'BETWEEN': TokenType.BETWEEN,
-            'AND': TokenType.AND,
-            'OR': TokenType.OR,
-            'NOT': TokenType.NOT,
-            'TRUE': TokenType.TRUE,
-            'FALSE': TokenType.FALSE,
-            'AVL': TokenType.AVL,
-            'ISAM': TokenType.ISAM,
-            'HASH': TokenType.HASH,
-            'BTREE': TokenType.BTREE,
-            'RTREE': TokenType.RTREE,
-            'GIN': TokenType.GIN,
-            'IVF': TokenType.IVF,
-            'ISH': TokenType.ISH,
+            "select": TokenType.SELECT,
+            "from": TokenType.FROM,
+            "where": TokenType.WHERE,
+            "create": TokenType.CREATE,
+            "drop": TokenType.DROP,
+            "table": TokenType.TABLE,
+            "index": TokenType.INDEX,
+            "insert": TokenType.INSERT,
+            "delete": TokenType.DELETE,
+            "into": TokenType.INTO,
+            "values": TokenType.VALUES,
+            "primary": TokenType.PRIMARY,
+            "key": TokenType.KEY,
+            "using": TokenType.USING,
+            "int": TokenType.INT,
+            "float": TokenType.FLOAT,
+            "varchar": TokenType.VARCHAR,
+            "boolean": TokenType.BOOLEAN,
+            "date": TokenType.DATE,
+            "array": TokenType.ARRAY,
+            "on": TokenType.ON,
+            "true": TokenType.TRUE,
+            "false": TokenType.FALSE,
+            "between": TokenType.BETWEEN,
+            "in": TokenType.IN,
+            "and": TokenType.AND,
+            "or": TokenType.OR,
+            "not": TokenType.NOT,
+            
+            # Index types
+            "avl": TokenType.AVL,
+            "isam": TokenType.ISAM,
+            "hash": TokenType.HASH,
+            "btree": TokenType.BTREE,
+            "rtree": TokenType.RTREE,
+            "gin": TokenType.GIN,
+            "ivf": TokenType.IVF,
+            "ish": TokenType.ISH
         }
     
     def scan_tokens(self):
         while not self.is_at_end():
             self.start = self.current
             self.scan_token()
-        
-        self.tokens.append(Token(TokenType.EOF, None, (self.line, self.current)))
+            
+        self.tokens.append(Token(TokenType.EOF, "", None, self.line))
         return self.tokens
-    
-    def is_at_end(self):
-        return self.current >= len(self.source)
     
     def scan_token(self):
         c = self.advance()
@@ -138,48 +140,56 @@ class Scanner:
             self.add_token(TokenType.SEMICOLON)
         elif c == ',':
             self.add_token(TokenType.COMMA)
+        elif c == '(':
+            self.add_token(TokenType.LPAREN)
+        elif c == ')':
+            self.add_token(TokenType.RPAREN)
+        elif c == '[':
+            self.add_token(TokenType.LBRACKET)
+        elif c == ']':
+            self.add_token(TokenType.RBRACKET)
         elif c == '*':
             self.add_token(TokenType.ASTERISK)
-        elif c == '(':
-            self.add_token(TokenType.LEFT_PAREN)
-        elif c == ')':
-            self.add_token(TokenType.RIGHT_PAREN)
         elif c == '=':
             self.add_token(TokenType.EQUALS)
         elif c == '<':
             if self.match('='):
-                self.add_token(TokenType.LESS_THAN_EQUALS)
+                self.add_token(TokenType.LESS_EQUALS)
             elif self.match('>'):
                 self.add_token(TokenType.NOT_EQUALS)
             else:
                 self.add_token(TokenType.LESS_THAN)
         elif c == '>':
             if self.match('='):
-                self.add_token(TokenType.GREATER_THAN_EQUALS)
+                self.add_token(TokenType.GREATER_EQUALS)
             else:
                 self.add_token(TokenType.GREATER_THAN)
-        elif c == "'":
-            self.string()
-        elif c.isspace():
-            pass  # Ignore whitespace
-        elif c.isdigit():
+        elif c in [' ', '\r', '\t']:
+            # Ignore whitespace
+            pass
+        elif c == '\n':
+            self.line += 1
+        elif c == '"' or c == "'":
+            self.string(c)
+        elif self.is_digit(c):
             self.number()
-        elif c.isalpha() or c == '_':
+        elif self.is_alpha(c):
             self.identifier()
         else:
-            raise ScanError(f"Unexpected character: {c}", self.line, self.current)
+            # Error handling can be added here
+            print(f"Unexpected character: {c} at line {self.line}")
+    
+    # Helper methods
+    def is_at_end(self):
+        return self.current >= len(self.source)
     
     def advance(self):
-        c = self.source[self.current]
         self.current += 1
-        return c
+        return self.source[self.current - 1]
     
     def match(self, expected):
-        if self.is_at_end():
+        if self.is_at_end() or self.source[self.current] != expected:
             return False
-        if self.source[self.current] != expected:
-            return False
-        
         self.current += 1
         return True
     
@@ -188,62 +198,61 @@ class Scanner:
             return '\0'
         return self.source[self.current]
     
-    def add_token(self, token_type, value=None):
-        text = self.source[self.start:self.current] if value is None else value
-        self.tokens.append(Token(token_type, text, (self.line, self.start)))
-    
-    def string(self):
-        while self.peek() != "'" and not self.is_at_end():
-            if self.peek() == '\n':
-                self.line += 1
-            self.advance()
-        
-        if self.is_at_end():
-            raise ScanError("Unterminated string", self.line, self.current)
-        
-        # Consume the closing "
-        self.advance()
-        
-        # Trim the surrounding quotes
-        value = self.source[self.start + 1:self.current - 1]
-        self.add_token(TokenType.STRING, value)
-    
-    def number(self):
-        while self.peek().isdigit():
-            self.advance()
-        
-        # Look for a decimal part
-        if self.peek() == '.' and self.peek_next().isdigit():
-            # Consume the "."
-            self.advance()
-            
-            while self.peek().isdigit():
-                self.advance()
-        
-        value = self.source[self.start:self.current]
-        self.add_token(TokenType.NUMBER, float(value) if '.' in value else int(value))
-    
     def peek_next(self):
         if self.current + 1 >= len(self.source):
             return '\0'
         return self.source[self.current + 1]
     
+    def is_alpha(self, c):
+        return ('a' <= c <= 'z') or ('A' <= c <= 'Z') or c == '_'
+    
+    def is_digit(self, c):
+        return '0' <= c <= '9'
+    
+    def is_alphanumeric(self, c):
+        return self.is_alpha(c) or self.is_digit(c)
+    
     def identifier(self):
-        while self.peek().isalnum() or self.peek() == '_':
+        while self.is_alphanumeric(self.peek()):
             self.advance()
+            
+        text = self.source[self.start:self.current].lower()
+        token_type = self.keywords.get(text, TokenType.IDENTIFIER)
+        self.add_token(token_type)
+    
+    def number(self):
+        while self.is_digit(self.peek()):
+            self.advance()
+            
+        # Look for decimal part
+        if self.peek() == '.' and self.is_digit(self.peek_next()):
+            self.advance()  # Consume the "."
+            
+            while self.is_digit(self.peek()):
+                self.advance()
+                
+        value = float(self.source[self.start:self.current])
+        if value.is_integer():
+            value = int(value)
+        self.add_token(TokenType.NUMBER, value)
+    
+    def string(self, quote):
+        while self.peek() != quote and not self.is_at_end():
+            if self.peek() == '\n':
+                self.line += 1
+            self.advance()
+            
+        if self.is_at_end():
+            print(f"Unterminated string at line {self.line}")
+            return
+            
+        # Consume closing quote
+        self.advance()
         
+        # Get string value without quotes
+        value = self.source[self.start+1:self.current-1]
+        self.add_token(TokenType.STRING, value)
+    
+    def add_token(self, token_type, literal=None):
         text = self.source[self.start:self.current]
-        token_type = self.keywords.get(text.upper())
-        
-        if token_type is None:
-            token_type = TokenType.IDENTIFIER
-        
-        self.add_token(token_type, text)
-
-
-class ScanError(Exception):
-    def __init__(self, message, line, position):
-        self.message = message
-        self.line = line
-        self.position = position
-        super().__init__(f"Line {line}, Position {position}: {message}")
+        self.tokens.append(Token(token_type, text, literal, self.line))
