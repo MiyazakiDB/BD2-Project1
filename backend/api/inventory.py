@@ -18,6 +18,7 @@ router = APIRouter()
 user_db_managers = {}
 
 def get_db_manager(user_id: UUID) -> DatabaseManager:
+    """Obtiene o crea un gestor de base de datos para el usuario"""
     user_id_str = str(user_id)
     if user_id_str not in user_db_managers:
         user_db_dir = os.path.join(DATA_DIR, user_id_str, "tables")
@@ -32,9 +33,11 @@ async def execute_sql_query(
     query: str = Form(...),
     current_user: User = Depends(get_current_user)
 ):
+    """Ejecuta una consulta SQL utilizando el parser configurado"""
     db_manager = get_db_manager(current_user.id)
     
     try:
+        # Verificar si es una consulta CREATE TABLE para validar duplicados
         if query.strip().upper().startswith("CREATE TABLE"):
             parser = SQLParser()
             parsed = parser.parse(query)
@@ -43,9 +46,10 @@ async def execute_sql_query(
                 if hasattr(db_manager, '_tables') and table_name.lower() in [name.lower() for name in db_manager._tables.keys()]:
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
-                        detail=f"A table with name '{table_name}' already exists"
+                        detail=f"Ya existe una tabla con el nombre '{table_name}'"
                     )
                     
+        # Ejecutar la consulta usando el DatabaseManager
         result = db_manager.execute_query(query)
         
         if isinstance(result, list):
@@ -63,7 +67,7 @@ async def execute_sql_query(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Query execution error: {str(e)}"
+            detail=f"Error al ejecutar la consulta: {str(e)}"
         )
 
 @router.post("/create-table-from-file")

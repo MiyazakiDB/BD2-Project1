@@ -141,6 +141,13 @@ class MiyazakiDBApp:
             help="Formatos soportados: CSV, TXT"
         )
 
+        # Add encoding selection
+        encoding_option = st.sidebar.selectbox(
+            "Encoding del archivo",
+            ["utf-8", "latin-1", "cp1252", "iso-8859-1"],
+            help="Selecciona el encoding correcto si hay problemas con caracteres especiales"
+        )
+
         if uploaded_file:
             with st.sidebar.form("upload_form"):
                 table_name = st.text_input("Nombre de tabla", value=uploaded_file.name.split('.')[0])

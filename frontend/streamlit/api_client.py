@@ -21,7 +21,7 @@ class APIClient:
             form_data = {
                 "table_name": table_name,
                 "delimiter": kwargs.get("delimiter", ","),
-                "encoding": kwargs.get("encoding", "utf-8"),
+                "encoding": kwargs.get("encoding", "latin-1"),  # Changed default from utf-8 to latin-1
                 "index_type": kwargs.get("index_type", ""),
                 "index_column": kwargs.get("index_column", ""),
                 "has_header": kwargs.get("has_header", True)

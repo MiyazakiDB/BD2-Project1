@@ -7,56 +7,17 @@ import json
 from fastapi import UploadFile, HTTPException, status
 
 from backend.settings import DATA_DIR, UPLOAD_DIR, TABLES_DIR
+from backend.db.database import SessionLocal
+from backend.db.repositories import FileRepository
 
 class UserFileStore:
     def __init__(self):
         self._ensure_dirs_exist()
-        # In-memory metadata store (would be a database in production)
-        self._files_metadata: Dict[UUID, Dict[str, Any]] = {}
-        self._load_metadata_from_disk()
+        # En producción, usamos base de datos en lugar de memoria
     
     def _ensure_dirs_exist(self):
         os.makedirs(DATA_DIR, exist_ok=True)
-        
-    def _get_metadata_path(self):
-        return os.path.join(DATA_DIR, "file_metadata.json")
     
-    def _save_metadata_to_disk(self):
-        """Save all file metadata to disk for persistence"""
-        # Convert UUIDs to strings for JSON serialization
-        serializable_metadata = {}
-        for file_id, metadata in self._files_metadata.items():
-            serializable_metadata[str(file_id)] = {
-                **metadata,
-                "id": str(metadata["id"]),
-                "owner_id": str(metadata["owner_id"])
-            }
-        
-        try:
-            with open(self._get_metadata_path(), 'w') as f:
-                json.dump(serializable_metadata, f, indent=2)
-        except Exception as e:
-            print(f"Error saving file metadata: {e}")
-    
-    def _load_metadata_from_disk(self):
-        """Load file metadata from disk on startup"""
-        if not os.path.exists(self._get_metadata_path()):
-            return
-            
-        try:
-            with open(self._get_metadata_path(), 'r') as f:
-                serialized_data = json.load(f)
-                
-            for file_id, metadata in serialized_data.items():
-                # Convert string IDs back to UUIDs
-                self._files_metadata[UUID(file_id)] = {
-                    **metadata,
-                    "id": UUID(metadata["id"]),
-                    "owner_id": UUID(metadata["owner_id"])
-                }
-        except Exception as e:
-            print(f"Error loading file metadata: {e}")
-
     def _get_user_dir(self, user_id: UUID) -> str:
         user_dir = os.path.join(DATA_DIR, str(user_id))
         os.makedirs(user_dir, exist_ok=True)
@@ -75,91 +36,112 @@ class UserFileStore:
     async def save_file(self, user_id: UUID, file: UploadFile, file_id: UUID) -> Dict[str, Any]:
         upload_dir = self._get_user_uploads_dir(user_id)
         
-        # Generate safe filename to avoid path traversal attacks
+        # Generar nombre de archivo seguro para evitar ataques de traversal
         original_filename = os.path.basename(file.filename)
         
-        # Check if file with same name already exists for this user
-        if self._file_exists_by_name(user_id, original_filename):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"A file with name '{original_filename}' already exists"
-            )
+        # Verificar si ya existe un archivo con el mismo nombre para este usuario
+        db = SessionLocal()
+        try:
+            existing_files = FileRepository.get_files_by_owner(db, str(user_id))
+            for existing_file in existing_files:
+                if existing_file.filename == original_filename:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Un archivo con nombre '{original_filename}' ya existe"
+                    )
+                    
+            file_path = os.path.join(upload_dir, f"{file_id}_{original_filename}")
             
-        file_path = os.path.join(upload_dir, f"{file_id}_{original_filename}")
-        
-        # Save file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        # Get file size
-        file_size = os.path.getsize(file_path)
-        
-        # Store metadata
-        metadata = {
-            "id": file_id,
-            "owner_id": user_id,
-            "filename": original_filename,
-            "path": file_path,
-            "size": file_size,
-            "mime_type": file.content_type or "application/octet-stream"
-        }
-        self._files_metadata[file_id] = metadata
-
-        # Save updated metadata to disk
-        self._save_metadata_to_disk()
-        
-        return metadata
+            # Guardar archivo
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            
+            # Obtener tamaño del archivo
+            file_size = os.path.getsize(file_path)
+            
+            # Almacenar metadatos en la base de datos
+            metadata = {
+                "id": file_id,
+                "owner_id": user_id,
+                "filename": original_filename,
+                "path": file_path,
+                "size": file_size,
+                "mime_type": file.content_type or "application/octet-stream"
+            }
+            
+            FileRepository.create_file(db, metadata)
+            
+            return metadata
+        finally:
+            db.close()
     
-    def _file_exists_by_name(self, user_id: UUID, filename: str) -> bool:
-        """Check if a file with the given name already exists for this user"""
-        for metadata in self._files_metadata.values():
-            if metadata["owner_id"] == user_id and metadata["filename"] == filename:
-                return True
-        return False
-        
     def get_user_files(self, user_id: UUID) -> List[Dict[str, Any]]:
-        return [
-            metadata for metadata in self._files_metadata.values()
-            if metadata["owner_id"] == user_id
-        ]
+        db = SessionLocal()
+        try:
+            files = FileRepository.get_files_by_owner(db, str(user_id))
+            return [
+                {
+                    "id": UUID(file.id),
+                    "owner_id": UUID(file.owner_id),
+                    "filename": file.filename,
+                    "path": file.path,
+                    "size": file.size,
+                    "mime_type": file.mime_type,
+                    "created_at": file.created_at
+                }
+                for file in files
+            ]
+        finally:
+            db.close()
     
     def get_file_by_id(self, user_id: UUID, file_id: UUID) -> Optional[Dict[str, Any]]:
-        metadata = self._files_metadata.get(file_id)
-        
-        if not metadata or metadata["owner_id"] != user_id:
-            return None
-        
-        return metadata
+        db = SessionLocal()
+        try:
+            file = FileRepository.get_file_by_id(db, str(file_id), str(user_id))
+            
+            if not file:
+                return None
+            
+            return {
+                "id": UUID(file.id),
+                "owner_id": UUID(file.owner_id),
+                "filename": file.filename,
+                "path": file.path,
+                "size": file.size,
+                "mime_type": file.mime_type,
+                "created_at": file.created_at
+            }
+        finally:
+            db.close()
     
     def delete_file(self, user_id: UUID, file_id: UUID) -> bool:
-        metadata = self.get_file_by_id(user_id, file_id)
-        
-        if not metadata:
-            return False
-        
-        file_path = metadata["path"]
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        
-        del self._files_metadata[file_id]
-
-        # Save updated metadata to disk
-        self._save_metadata_to_disk()
-        
-        return True
+        db = SessionLocal()
+        try:
+            file = FileRepository.get_file_by_id(db, str(file_id), str(user_id))
+            
+            if not file:
+                return False
+            
+            file_path = file.path
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            
+            return FileRepository.delete_file(db, str(file_id), str(user_id))
+        finally:
+            db.close()
     
     def get_csv_reader(self, user_id: UUID, file_id: UUID):
         metadata = self.get_file_by_id(user_id, file_id)
         
         if not metadata:
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail="Archivo no encontrado")
         
         file_path = metadata["path"]
         if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="File not found on disk")
+            raise HTTPException(status_code=404, detail="Archivo no encontrado en disco")
         
         if not metadata["mime_type"].startswith("text/csv") and not file_path.endswith(".csv"):
-            raise HTTPException(status_code=400, detail="File is not a CSV")
+            raise HTTPException(status_code=400, detail="El archivo no es un CSV")
         
         def csv_reader():
             with open(file_path, 'r', newline='', encoding='utf-8') as csvfile:
