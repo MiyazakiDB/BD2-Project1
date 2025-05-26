@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Table, Button, Alert } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { tableService } from '../../services/api';
+import './Tables.css';
 
 const TableList = () => {
   const [tables, setTables] = useState([]);
@@ -48,79 +49,125 @@ const TableList = () => {
     }
   };
 
-  if (loading) return <div className="text-center mt-5">Loading tables...</div>;
+  if (loading) return <div className="tables-loading-container">
+    <div className="tables-loading-spinner"></div>
+    <p className="tables-loading-text">Loading tables...</p>
+  </div>;
 
-  // Mantén toda la lógica existente, solo cambia el return:
+  return (
+    <div className="tables-container">
+      <div className="tables-wrapper">
+        {/* Header */}
+        <div className="tables-header">
+          <div className="tables-header-content">
+            <div className="tables-title-section">
+              <h1 className="tables-main-title">🗃️ Database Tables</h1>
+              <p className="tables-subtitle">Manage your database tables and structures</p>
+            </div>
+            <Link to="/tables/create" className="tables-create-btn">
+              ➕ Create New Table
+            </Link>
+          </div>
 
-return (
-  <div className="container fade-in">
-    <div className="smart-header">
-      <h1>Smart Stock Tables</h1>
-      <p>Manage your database tables</p>
-    </div>
-
-    {error && <Alert variant="danger">{error}</Alert>}
-    
-    <div className="d-flex justify-content-between align-items-center mb-4">
-      <h2 style={{color: '#1e3a8a', margin: 0}}>My Tables</h2>
-      <Link to="/tables/create" className="btn btn-primary">
-        + Create Table
-      </Link>
-    </div>
-
-    {loading ? (
-      <div className="loading-state">
-        <div className="loading-spinner"></div>
-        <p>Loading your tables...</p>
-      </div>
-    ) : tables.length === 0 ? (
-      <div className="empty-state">
-        <div className="empty-state-icon">📊</div>
-        <h3>No tables found</h3>
-        <p>Create your first table to get started with Smart Stock</p>
-        <Link to="/tables/create" className="btn btn-primary">
-          Create Your First Table
-        </Link>
-      </div>
-    ) : (
-      <div className="card-grid">
-        {tables.map((table, index) => (
-          <div key={table.name} className="card-item slide-in-left" style={{animationDelay: `${index * 0.1}s`}}>
-            <div className="card-title">{table.name}</div>
-            <div className="card-subtitle">Database Table</div>
-            
-            <div style={{margin: '15px 0'}}>
-              <div className="d-flex justify-content-between mb-2">
-                <span style={{color: '#64748b'}}>Columns:</span>
-                <strong>{table.columns?.length || 0}</strong>
-              </div>
-              <div className="d-flex justify-content-between mb-2">
-                <span style={{color: '#64748b'}}>Rows:</span>
-                <strong>{table.row_count?.toLocaleString() || 0}</strong>
-              </div>
-              <div className="d-flex justify-content-between">
-                <span style={{color: '#64748b'}}>Created:</span>
-                <strong>{new Date(table.created_at).toLocaleDateString()}</strong>
+          {/* Stats Cards */}
+          <div className="tables-stats-grid">
+            <div className="tables-stat-card">
+              <div className="tables-stat-icon">📊</div>
+              <div className="tables-stat-info">
+                <p className="tables-stat-label">Total Tables</p>
+                <p className="tables-stat-value">{tables.length}</p>
               </div>
             </div>
             
-            <div className="card-actions">
-              <Link to={`/tables/${table.name}`} className="btn btn-secondary btn-sm">
-                View Data
-              </Link>
-              <button 
-                onClick={() => handleDelete(table.name)} 
-                className="btn btn-danger btn-sm"
-              >
-                Delete
-              </button>
+            <div className="tables-stat-card">
+              <div className="tables-stat-icon">🔗</div>
+              <div className="tables-stat-info">
+                <p className="tables-stat-label">Active Connections</p>
+                <p className="tables-stat-value">1</p>
+              </div>
+            </div>
+
+            <div className="tables-stat-card">
+              <div className="tables-stat-icon">⚡</div>
+              <div className="tables-stat-info">
+                <p className="tables-stat-label">Status</p>
+                <p className="tables-stat-value">Online</p>
+              </div>
             </div>
           </div>
-        ))}
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="tables-error-alert">
+            ❌ {error}
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading ? (
+          <div className="tables-loading-container">
+            <div className="tables-loading-spinner"></div>
+            <p className="tables-loading-text">Loading your tables...</p>
+          </div>
+        ) : tables.length === 0 ? (
+          /* Empty State */
+          <div className="tables-empty-state">
+            <div className="tables-empty-icon">🗃️</div>
+            <h3 className="tables-empty-title">No tables found</h3>
+            <p className="tables-empty-subtitle">Create your first database table to get started</p>
+            <Link to="/tables/create" className="tables-empty-create-btn">
+              ➕ Create Your First Table
+            </Link>
+          </div>
+        ) : (
+          /* Tables Grid */
+          <div className="tables-grid">
+            {tables.map((table, index) => (
+              <div
+                key={table.name}
+                className="tables-card"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <div className="tables-card-header">
+                  <div className="tables-card-icon">🗃️</div>
+                  <button
+                    onClick={() => handleDelete(table.name)}
+                    className="tables-delete-btn"
+                  >
+                    🗑️
+                  </button>
+                </div>
+                
+                <h3 className="tables-card-title">{table.name}</h3>
+                
+                <div className="tables-card-details">
+                  <div className="tables-card-detail">
+                    <span>Columns:</span>
+                    <span>{table.columns?.length || 0}</span>
+                  </div>
+                  <div className="tables-card-detail">
+                    <span>Rows:</span>
+                    <span>{table.row_count?.toLocaleString() || 0}</span>
+                  </div>
+                  <div className="tables-card-detail">
+                    <span>Created:</span>
+                    <span>{new Date(table.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                <div className="tables-card-actions">
+                  <Link to={`/tables/${table.name}`} className="tables-view-btn">
+                    👁️ View Data
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    )}
-  </div>
-);
+    </div>
+  );
 };
 
 export default TableList;

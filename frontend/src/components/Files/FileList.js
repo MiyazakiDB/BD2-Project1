@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Alert } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import { fileService } from '../../services/api';
+import './Files.css';
 
 const FileList = () => {
   const [files, setFiles] = useState([]);
@@ -39,85 +39,133 @@ const FileList = () => {
   }, []);
 
   const handleDelete = async (filename) => {
-    if (window.confirm(`Are you sure you want to delete ${filename}?`)) {
+    if (window.confirm(`¿Estás seguro de que quieres eliminar ${filename}?`)) {
       try {
         await fileService.deleteFile(filename);
         fetchFiles();
       } catch (err) {
-        setError('Error deleting file. Please try again.');
+        setError('Error eliminando archivo. Por favor intenta de nuevo.');
         console.error(err);
       }
     }
   };
 
-  return (
-    <div className="container fade-in">
-      <div className="smart-header">
-        <h1>Smart Stock Files</h1>
-        <p>Manage your uploaded data files</p>
-      </div>
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 style={{color: '#1e3a8a', margin: 0}}>My Files</h2>
-        <Link to="/files/upload" className="btn btn-primary">
-          📁 Upload New File
-        </Link>
+  return (
+    <div className="files-container">
+      <div className="files-wrapper">
+        {/* Header */}
+        <div className="files-header">
+          <div className="files-header-content">
+            <div className="files-title-section">
+              <h1 className="files-main-title">📁 File Manager</h1>
+              <p className="files-subtitle">Manage your uploaded data files with ease</p>
+            </div>
+            <Link to="/files/upload" className="files-upload-btn">
+              📤 Upload New File
+            </Link>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="files-stats-grid">
+            <div className="files-stat-card">
+              <div className="files-stat-icon">📄</div>
+              <div className="files-stat-info">
+                <p className="files-stat-label">Total Files</p>
+                <p className="files-stat-value">{files.length}</p>
+              </div>
+            </div>
+            
+            <div className="files-stat-card">
+              <div className="files-stat-icon">💾</div>
+              <div className="files-stat-info">
+                <p className="files-stat-label">Total Size</p>
+                <p className="files-stat-value">
+                  {formatFileSize(files.reduce((acc, file) => acc + file.size, 0))}
+                </p>
+              </div>
+            </div>
+
+            <div className="files-stat-card">
+              <div className="files-stat-icon">📅</div>
+              <div className="files-stat-info">
+                <p className="files-stat-label">Last Upload</p>
+                <p className="files-stat-value">{files.length > 0 ? 'Today' : 'None'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="files-error-alert">
+            ❌ {error}
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading ? (
+          <div className="files-loading-container">
+            <div className="files-loading-spinner"></div>
+            <p className="files-loading-text">Loading your files...</p>
+          </div>
+        ) : files.length === 0 ? (
+          /* Empty State */
+          <div className="files-empty-state">
+            <div className="files-empty-icon">📂</div>
+            <h3 className="files-empty-title">No files found</h3>
+            <p className="files-empty-subtitle">Upload your first data file to get started</p>
+            <Link to="/files/upload" className="files-empty-upload-btn">
+              📤 Upload Your First File
+            </Link>
+          </div>
+        ) : (
+          /* Files Grid */
+          <div className="files-grid">
+            {files.map((file, index) => (
+              <div
+                key={file.filename}
+                className="files-card"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <div className="files-card-header">
+                  <div className="files-card-icon">📄</div>
+                  <button
+                    onClick={() => handleDelete(file.filename)}
+                    className="files-delete-btn"
+                  >
+                    🗑️
+                  </button>
+                </div>
+                
+                <h3 className="files-card-title">{file.filename}</h3>
+                
+                <div className="files-card-details">
+                  <div className="files-card-detail">
+                    <span>Size:</span>
+                    <span>{formatFileSize(file.size)}</span>
+                  </div>
+                  <div className="files-card-detail">
+                    <span>Uploaded:</span>
+                    <span>{new Date(file.upload_date).toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                <div className="files-card-progress">
+                  <div className="files-progress-bar"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      
-      {error && <Alert variant="danger">{error}</Alert>}
-      
-      {loading ? (
-        <div className="loading-state">
-          <div className="loading-spinner"></div>
-          <p>Loading your files...</p>
-        </div>
-      ) : files.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">📂</div>
-          <h3>No files found</h3>
-          <p>Upload your first data file to get started with Smart Stock</p>
-          <Link to="/files/upload" className="btn btn-primary">
-            Upload Your First File
-          </Link>
-        </div>
-      ) : (
-        <div className="card">
-          <div className="card-header">
-            📁 Files Library ({files.length} files)
-          </div>
-          <div className="card-body" style={{padding: 0}}>
-            <Table className="table">
-              <thead>
-                <tr>
-                  <th>📄 Filename</th>
-                  <th>📊 Size</th>
-                  <th>📅 Upload Date</th>
-                  <th>⚡ Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {files.map((file, index) => (
-                  <tr key={file.filename} className="slide-in-left" style={{animationDelay: `${index * 0.1}s`}}>
-                    <td style={{fontWeight: '500'}}>{file.filename}</td>
-                    <td>{Math.round(file.size / 1024)} KB</td>
-                    <td>{new Date(file.upload_date).toLocaleString()}</td>
-                    <td>
-                      <Button 
-                        variant="danger" 
-                        size="sm"
-                        onClick={() => handleDelete(file.filename)}
-                        className="btn-sm"
-                      >
-                        🗑️ Delete
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

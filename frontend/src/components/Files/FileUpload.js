@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Form, Button, Alert, ProgressBar } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import { fileService } from '../../services/api';
+import './Files.css';
 
 const FileUpload = () => {
   const [file, setFile] = useState(null);
@@ -11,11 +11,6 @@ const FileUpload = () => {
   const [success, setSuccess] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const navigate = useNavigate();
-
-  const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
-    setError('');
-  };
 
   const handleFileSelect = (e) => {
     setFile(e.target.files[0]);
@@ -58,7 +53,6 @@ const FileUpload = () => {
     setSuccess('');
 
     try {
-      // Verify token presence before making request
       const token = localStorage.getItem('token');
       if (!token) {
         setError('Authentication token is missing. Please log in again.');
@@ -92,26 +86,50 @@ const FileUpload = () => {
     }
   };
 
-  return (
-    <div className="container fade-in">
-      <div className="smart-header">
-        <h1>Upload Data File</h1>
-        <p>Upload your CSV or Excel files to Smart Stock</p>
-      </div>
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
-      <div className="card">
-        <div className="card-header">
-          📤 File Upload
+  return (
+    <div className="upload-container">
+      <div className="upload-wrapper">
+        {/* Header */}
+        <div className="upload-header">
+          <Link to="/files" className="upload-back-btn">
+            ← Back
+          </Link>
+          <div className="upload-title-section">
+            <h1 className="upload-main-title">📤 Upload File</h1>
+            <p className="upload-subtitle">Upload your CSV or Excel files to Smart Stock</p>
+          </div>
         </div>
-        <div className="card-body">
-          {error && <Alert variant="danger">{error}</Alert>}
-          {success && <Alert variant="success">{success}</Alert>}
+
+        {/* Main Upload Card */}
+        <div className="upload-card">
+          {/* Alerts */}
+          {error && (
+            <div className="upload-error-alert">
+              ❌ {error}
+            </div>
+          )}
           
-          <Form onSubmit={handleSubmit}>
-            <Form.Group className="mb-4">
-              <Form.Label>Select File</Form.Label>
-              <div 
-                className={`file-upload-area ${dragActive ? 'dragover' : ''}`}
+          {success && (
+            <div className="upload-success-alert">
+              ✅ {success}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="upload-form">
+            {/* Drag & Drop Area */}
+            <div className="upload-section">
+              <label className="upload-label">Select File</label>
+              
+              <div
+                className={`upload-drop-zone ${dragActive ? 'upload-drop-active' : ''} ${file ? 'upload-drop-success' : ''}`}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
                 onDragOver={handleDrag}
@@ -123,60 +141,91 @@ const FileUpload = () => {
                   type="file"
                   onChange={handleFileSelect}
                   accept=".csv,.xlsx,.xls"
-                  style={{ display: 'none' }}
+                  className="upload-file-input"
                 />
+
                 {file ? (
-                  <div style={{textAlign: 'center'}}>
-                    <div style={{fontSize: '2rem', marginBottom: '10px'}}>📄</div>
-                    <p style={{margin: 0, fontWeight: '500'}}>{file.name}</p>
-                    <p style={{margin: 0, color: '#64748b', fontSize: '0.9rem'}}>
-                      {Math.round(file.size / 1024)} KB
-                    </p>
+                  <div className="upload-file-selected">
+                    <div className="upload-file-icon">📄</div>
+                    <h3 className="upload-file-name">{file.name}</h3>
+                    <p className="upload-file-size">{formatFileSize(file.size)}</p>
+                    <p className="upload-file-status">✓ File ready for upload</p>
                   </div>
                 ) : (
-                  <div style={{textAlign: 'center'}}>
-                    <div style={{fontSize: '3rem', marginBottom: '15px'}}>☁️</div>
-                    <p style={{margin: 0, fontWeight: '500'}}>Drop your file here or click to browse</p>
-                    <p style={{margin: '5px 0 0 0', color: '#64748b', fontSize: '0.9rem'}}>
-                      Supports CSV, XLSX, XLS files
+                  <div className="upload-file-empty">
+                    <div className="upload-cloud-icon">☁️</div>
+                    <h3 className="upload-empty-title">
+                      Drop your file here or click to browse
+                    </h3>
+                    <p className="upload-empty-subtitle">
+                      Supports CSV, XLSX, XLS files up to 10MB
                     </p>
+                    <div className="upload-file-types">
+                      <span className="upload-file-type">.CSV</span>
+                      <span className="upload-file-type">.XLSX</span>
+                      <span className="upload-file-type">.XLS</span>
+                    </div>
+                  </div>
+                )}
+
+                {dragActive && (
+                  <div className="upload-drag-overlay">
+                    <p className="upload-drag-text">Drop file here!</p>
                   </div>
                 )}
               </div>
-            </Form.Group>
 
+              {file && (
+                <button
+                  type="button"
+                  onClick={() => setFile(null)}
+                  className="upload-remove-btn"
+                >
+                  ❌ Remove file
+                </button>
+              )}
+            </div>
+
+            {/* Progress Bar */}
             {uploading && (
-              <Form.Group className="mb-3">
-                <Form.Label>Upload Progress</Form.Label>
-                <ProgressBar 
-                  now={uploadProgress} 
-                  label={`${uploadProgress}%`}
-                  variant="info"
-                  style={{height: '20px'}}
-                />
-              </Form.Group>
+              <div className="upload-progress-section">
+                <div className="upload-progress-header">
+                  <span className="upload-progress-label">Upload Progress</span>
+                  <span className="upload-progress-percent">{uploadProgress}%</span>
+                </div>
+                <div className="upload-progress-container">
+                  <div
+                    className="upload-progress-bar"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              </div>
             )}
 
-            <div className="d-flex justify-content-between">
-              <Link to="/files" className="btn btn-secondary">
+            {/* Action Buttons */}
+            <div className="upload-actions">
+              <Link to="/files" className="upload-cancel-btn">
                 ← Back to Files
               </Link>
-              <Button 
-                variant="primary" 
-                type="submit" 
+
+              <button
+                type="submit"
                 disabled={!file || uploading}
+                className={`upload-submit-btn ${!file || uploading ? 'upload-submit-disabled' : ''}`}
               >
                 {uploading ? (
                   <>
-                    <span className="loading-spinner"></span>
+                    <div className="upload-spinner"></div>
                     Uploading...
                   </>
                 ) : (
-                  '📤 Upload File'
+                  <>
+                    📤 Upload File
+                  </>
                 )}
-              </Button>
+              </button>
             </div>
-          </Form>
+          </form>
         </div>
       </div>
     </div>

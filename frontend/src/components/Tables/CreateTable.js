@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Form, Button, Alert, Card, Row, Col, Badge } from 'react-bootstrap';
-import { Link,useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { tableService } from '../../services/api';
+import './Tables.css';
 
 const CreateTable = () => {
   const navigate = useNavigate();
@@ -10,7 +11,7 @@ const CreateTable = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
-  const [hasHeaders, setHasHeaders] = useState(true); // Nuevo estado para encabezados
+  const [hasHeaders, setHasHeaders] = useState(true);
 
   const dataTypes = ['INT', 'FLOAT', 'VARCHAR', 'BOOLEAN', 'DATE'];
 
@@ -50,7 +51,7 @@ const CreateTable = () => {
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('table_name', tableName);
-    formData.append('has_headers', hasHeaders.toString()); // Enviar información de encabezados
+    formData.append('has_headers', hasHeaders.toString());
     formData.append(
       'columns',
       JSON.stringify(
@@ -81,144 +82,173 @@ const CreateTable = () => {
     }
   };
 
-  // Mantén toda la lógica existente, solo cambia el return:
+  return (
+    <div className="create-table-container">
+      <div className="create-table-wrapper">
+        {/* Header */}
+        <div className="create-table-header">
+          <Link to="/tables" className="create-table-back-btn">
+            ← Back
+          </Link>
+          <div className="create-table-title-section">
+            <h1 className="create-table-main-title">➕ Create New Table</h1>
+            <p className="create-table-subtitle">Define your table structure and upload data</p>
+          </div>
+        </div>
 
-return (
-  <div className="container fade-in">
-    <div className="smart-header">
-      <h1>Create New Table</h1>
-      <p>Define your table structure and upload data</p>
-    </div>
-
-    <div className="card">
-      <div className="card-header">
-        🏗️ Table Configuration
-      </div>
-      <div className="card-body">
-        {error && <Alert variant="danger">{error}</Alert>}
-        
-        <Form onSubmit={handleSubmit}>
-          <Form.Group className="mb-4">
-            <Form.Label>Table Name</Form.Label>
-            <Form.Control
-              type="text"
-              value={tableName}
-              onChange={(e) => setTableName(e.target.value)}
-              placeholder="Enter table name (e.g., products, customers)"
-              required
-            />
-          </Form.Group>
-
-          <Form.Group className="mb-4">
-            <Form.Label>Data File</Form.Label>
-            <Form.Control
-              type="file"
-              onChange={(e) => setSelectedFile(e.target.files[0])}
-              accept=".csv,.xlsx,.xls"
-              required
-            />
-            <Form.Text className="text-muted">
-              Upload CSV, XLSX, or XLS files with your data
-            </Form.Text>
-          </Form.Group>
-
-          <Form.Group className="mb-4">
-            <div className="d-flex justify-content-between align-items-center mb-2">
-              <Form.Label className="mb-0">File Header Settings</Form.Label>
-              <span className={`badge ${hasHeaders ? 'bg-success' : 'bg-secondary'}`}>
-                {hasHeaders ? 'Headers: YES' : 'Headers: NO'}
-              </span>
+        {/* Main Create Card */}
+        <div className="create-table-card">
+          {/* Alerts */}
+          {error && (
+            <div className="create-table-error-alert">
+              ❌ {error}
             </div>
-            <Form.Check
-              type="checkbox"
-              label="File has headers (first line contains column names)"
-              checked={hasHeaders}
-              onChange={(e) => setHasHeaders(e.target.checked)}
-            />
-          </Form.Group>
+          )}
 
-          <div className="mb-4">
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <h5 style={{color: '#1e3a8a', margin: 0}}>Column Definitions</h5>
-              <Button variant="secondary" onClick={addColumn} size="sm">
-                ➕ Add Column
-              </Button>
+          <form onSubmit={handleSubmit} className="create-table-form">
+            {/* Table Name Section */}
+            <div className="create-table-section">
+              <label className="create-table-label">Table Name</label>
+              <input
+                type="text"
+                value={tableName}
+                onChange={(e) => setTableName(e.target.value)}
+                className="create-table-input"
+                placeholder="Enter table name (e.g., products, customers)"
+                required
+              />
             </div>
-            
-            {columns.map((column, index) => (
-              <div key={index} className="card-item mb-3">
-                <Row>
-                  <Col md={4}>
-                    <Form.Group className="mb-2">
-                      <Form.Label>Column Name</Form.Label>
-                      <Form.Control
+
+            {/* File Section */}
+            <div className="create-table-section">
+              <label className="create-table-label">Data File</label>
+              <input
+                type="file"
+                onChange={(e) => setSelectedFile(e.target.files[0])}
+                className="create-table-input"
+                accept=".csv,.xlsx,.xls"
+                required
+              />
+              <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '0.5rem 0 0 0' }}>
+                Upload CSV, XLSX, or XLS files with your data
+              </p>
+            </div>
+
+            {/* Headers Section */}
+            <div className="create-table-section">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <label className="create-table-label" style={{ marginBottom: 0 }}>File Header Settings</label>
+                <span className={`badge ${hasHeaders ? 'bg-success' : 'bg-secondary'}`} style={{ 
+                  background: hasHeaders ? '#16a34a' : '#64748b',
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '12px',
+                  fontSize: '0.8rem'
+                }}>
+                  {hasHeaders ? 'Headers: YES' : 'Headers: NO'}
+                </span>
+              </div>
+              <label className="create-table-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={hasHeaders}
+                  onChange={(e) => setHasHeaders(e.target.checked)}
+                  className="create-table-checkbox"
+                />
+                <span className="create-table-checkbox-text">File has headers (first line contains column names)</span>
+              </label>
+            </div>
+
+            {/* Columns Section */}
+            <div className="create-table-section">
+              <div className="create-table-columns-header">
+                <label className="create-table-label">Column Definitions</label>
+                <button
+                  type="button"
+                  onClick={addColumn}
+                  className="create-table-add-column-btn"
+                >
+                  ➕ Add Column
+                </button>
+              </div>
+
+              <div className="create-table-columns-list">
+                {columns.map((column, index) => (
+                  <div key={index} className="create-table-column-row">
+                    <div className="create-table-column-inputs">
+                      <input
                         type="text"
                         value={column.name}
                         onChange={(e) => handleColumnChange(index, 'name', e.target.value)}
-                        placeholder="Enter column name"
+                        className="create-table-column-input"
+                        placeholder="Column name..."
                         required
                       />
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group className="mb-2">
-                      <Form.Label>Data Type</Form.Label>
-                      <Form.Select
+                      
+                      <select
                         value={column.data_type}
                         onChange={(e) => handleColumnChange(index, 'data_type', e.target.value)}
+                        className="create-table-column-select"
+                        required
                       >
                         {dataTypes.map(type => (
                           <option key={type} value={type}>{type}</option>
                         ))}
-                      </Form.Select>
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group className="mb-2 mt-4">
-                      <Form.Check
-                        type="checkbox"
-                        label="Create Index"
-                        checked={column.is_indexed}
-                        onChange={(e) => handleColumnChange(index, 'is_indexed', e.target.checked)}
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={2} className="d-flex align-items-center justify-content-end">
-                    {columns.length > 1 && (
-                      <Button 
-                        variant="danger" 
-                        size="sm"
-                        onClick={() => removeColumn(index)}
-                      >
-                        🗑️
-                      </Button>
-                    )}
-                  </Col>
-                </Row>
-              </div>
-            ))}
-          </div>
+                      </select>
 
-          <div className="d-flex justify-content-between">
-            <Link to="/tables" className="btn btn-secondary">
-              ← Back to Tables
-            </Link>
-            <Button variant="primary" type="submit" disabled={loading}>
-              {loading ? (
-                <>
-                  <span className="loading-spinner"></span>
-                  Creating...
-                </>
-              ) : (
-                '🏗️ Create Table'
-              )}
-            </Button>
-          </div>
-        </Form>
+                      <label className="create-table-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={column.is_indexed}
+                          onChange={(e) => handleColumnChange(index, 'is_indexed', e.target.checked)}
+                          className="create-table-checkbox"
+                        />
+                        <span className="create-table-checkbox-text">Create Index</span>
+                      </label>
+                    </div>
+
+                    {columns.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeColumn(index)}
+                        className="create-table-remove-column-btn"
+                      >
+                        ❌
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="create-table-actions">
+              <Link to="/tables" className="create-table-cancel-btn">
+                ← Back to Tables
+              </Link>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className={`create-table-submit-btn ${loading ? 'create-table-submit-disabled' : ''}`}
+              >
+                {loading ? (
+                  <>
+                    <div className="create-table-spinner"></div>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    🏗️ Create Table
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 };
 
 export default CreateTable;
