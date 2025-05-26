@@ -43,7 +43,7 @@ const AppNavbar = ({ isAuthenticated, onLogout }) => {
             ) : (
               <>
                 <Nav.Link as={Link} to="/login" style={{fontWeight: '500'}}>
-                  🔐 Login
+                  🔐 Wa
                 </Nav.Link>
                 <Nav.Link as={Link} to="/register" style={{fontWeight: '500'}}>
                   📝 Register
