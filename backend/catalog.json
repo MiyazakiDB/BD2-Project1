@@ -29,8 +29,8 @@
       "data_file": "C:\\Users\\tokio\\OneDrive\\Escritorio\\BD2-Project1\\backend\\data\\12\\12_kl.dat",
       "indices": {}
     },
-    "10_gy": {
-      "name": "gy",
+    "10_tabla": {
+      "name": "tabla",
       "user_id": 10,
       "file_path": "backend/uploads\\ejemplo2.txt",
       "columns": [
@@ -54,8 +54,8 @@
         }
       ],
       "row_count": 3,
-      "created_at": "2025-05-25T14:06:47.068480",
-      "data_file": "C:\\Users\\tokio\\OneDrive\\Escritorio\\BD2-Project1\\backend\\data\\10\\10_gy.dat",
+      "created_at": "2025-05-26T18:41:59.105239",
+      "data_file": "C:\\Users\\tokio\\OneDrive\\Escritorio\\BD2-Project1\\backend\\data\\10\\10_tabla.dat",
       "indices": {}
     }
   },
