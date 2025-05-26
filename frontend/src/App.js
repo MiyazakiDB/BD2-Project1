@@ -32,7 +32,7 @@ function App() {
   const ProtectedRoute = ({ children }) => {
     const token = localStorage.getItem('token');
     if (!token) {
-      return <Navigate to="/login" />;
+      return <Navigate to="/login" replace />;
     }
     return children;
   };
@@ -49,35 +49,41 @@ function App() {
 
   return (
     <div className="App">
-     
       <Container fluid>
-        {isAuthenticated ? (
-          <Row>
-            <Col md={3} lg={2} className="sidebar">
-              <Sidebar />
-            </Col>
-            <Col md={9} lg={10} className="content-area">
-              <Routes>
-                <Route path="/" element={<Landing />} />
-                <Route path="/files" element={<ProtectedRoute><FileList /></ProtectedRoute>} />
-                <Route path="/files/upload" element={<ProtectedRoute><FileUpload /></ProtectedRoute>} />
-                <Route path="/tables" element={<ProtectedRoute><TableList /></ProtectedRoute>} />
-                <Route path="/tables/create" element={<ProtectedRoute><CreateTable /></ProtectedRoute>} />
-                <Route path="/tables/:tableName" element={<ProtectedRoute><TableData /></ProtectedRoute>} />
-                <Route path="/query" element={<ProtectedRoute><QueryExecutor /></ProtectedRoute>} />
-                <Route path="/metrics" element={<ProtectedRoute><MetricsDisplay /></ProtectedRoute>} />
-                <Route path="*" element={<Navigate to="/" />} />
-              </Routes>
-            </Col>
-          </Row>
-        ) : (
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<Login onLogin={handleLogin} />} />
-            <Route path="/register" element={<Register onLogin={handleLogin} />} />
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        )}
+        <Routes>
+          {/* Rutas públicas SIN layout */}
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login onLogin={handleLogin} />} />
+          <Route path="/register" element={<Register onLogin={handleLogin} />} />
+
+          {/* Rutas privadas CON layout */}
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <Row>
+                  <Col md={3} lg={2} className="sidebar">
+                    <Sidebar />
+                  </Col>
+                  <Col md={9} lg={10} className="content-area">
+                    <Routes>
+                      <Route path="/files" element={<FileList />} />
+                      <Route path="/files/upload" element={<FileUpload />} />
+                      <Route path="/tables" element={<TableList />} />
+                      <Route path="/tables/create" element={<CreateTable />} />
+                      <Route path="/tables/:tableName" element={<TableData />} />
+                      <Route path="/query" element={<QueryExecutor />} />
+                      <Route path="/metrics" element={<MetricsDisplay />} />
+                      <Route path="*" element={<Navigate to="/" />} />
+                    </Routes>
+                  </Col>
+                </Row>
+              </ProtectedRoute>
+            }
+          />
+          {/* Catch-all para rutas no encontradas */}
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
       </Container>
     </div>
   );
