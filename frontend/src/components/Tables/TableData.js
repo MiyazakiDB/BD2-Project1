@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Table, Alert, Pagination, Button, Spinner } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { tableService } from '../../services/api';
+import './Tables.css';
 
 const TableData = () => {
   const { tableName } = useParams();
@@ -71,121 +72,166 @@ const TableData = () => {
 
   if (loading) {
     return (
-      <div className="text-center mt-5">
-        <Spinner animation="border" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </Spinner>
-        <p className="mt-2">Loading table data...</p>
+      <div className="table-data-loading-container">
+        <div className="table-data-loading-spinner"></div>
+        <p className="table-data-loading-text">Loading table data...</p>
       </div>
     );
   }
 
   return (
-    <div className="mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>Table: {tableName}</h2>
-        <div>
-          <Button as={Link} to="/tables" variant="secondary" className="me-2">
-            Back to Tables
-          </Button>
-          <Button as={Link} to="/query" variant="primary">
-            Query Table
-          </Button>
-        </div>
-      </div>
-
-      {error && <Alert variant="danger">{error}</Alert>}
-
-      {!error && (
-        <>
-          <div className="mb-3">
-            <p className="text-muted">
-              Showing {((currentPage - 1) * 50) + 1} to {Math.min(currentPage * 50, totalRows)} of {totalRows} rows
-            </p>
+    <div className="table-data-container">
+      <div className="table-data-wrapper">
+        {/* Header */}
+        <div className="table-data-header">
+          <Link to="/tables" className="table-data-back-btn">
+            ← Back to Tables
+          </Link>
+          <div className="table-data-title-section">
+            <h1 className="table-data-main-title">📊 {tableName}</h1>
+            <p className="table-data-subtitle">View and manage table data</p>
           </div>
+        </div>
 
-          {data && data.length > 0 ? (
-            <>
-              <Table striped bordered hover responsive>
-                <thead className="table-dark">
-                  <tr>
-                    {columns && columns.length > 0 ? (
-                      columns.map((column, index) => (
-                        <th key={index}>{column}</th>
-                      ))
-                    ) : (
-                      <th>No columns defined</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.map((row, rowIndex) => {
-                    console.log(`Rendering row ${rowIndex}:`, row); // Debug
-                    return (
-                      <tr key={rowIndex}>
-                        {Array.isArray(row) ? (
-                          row.map((cell, cellIndex) => {
-                            const cellValue = cell !== null && cell !== undefined ? String(cell) : '';
-                            console.log(`Cell [${rowIndex}][${cellIndex}]:`, cell, '-> displayed as:', cellValue); // Debug
-                            return (
-                              <td key={cellIndex}>
-                                {cellValue}
-                              </td>
-                            );
-                          })
+        {/* Controls */}
+        <div className="table-data-controls">
+          <div className="table-data-info">
+            <span className="table-data-info-text">
+              Showing {((currentPage - 1) * 50) + 1} to {Math.min(currentPage * 50, totalRows)} of {totalRows} rows
+            </span>
+          </div>
+          <div>
+            <Link to="/query" style={{ 
+              background: '#0E3459',
+              color: 'white',
+              padding: '10px 20px',
+              borderRadius: '10px',
+              textDecoration: 'none',
+              fontWeight: '600',
+              transition: 'all 0.3s ease'
+            }}>
+              🔍 Query Table
+            </Link>
+          </div>
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="table-data-error-alert">
+            ❌ {error}
+          </div>
+        )}
+
+        {!error && (
+          <>
+            {data && data.length > 0 ? (
+              <div className="table-data-content">
+                <div className="table-data-scroll-container">
+                  <table className="table-data-table">
+                    <thead className="table-data-thead">
+                      <tr className="table-data-header-row">
+                        {columns && columns.length > 0 ? (
+                          columns.map((column, index) => (
+                            <th key={index} className="table-data-th">{column}</th>
+                          ))
                         ) : (
-                          <td colSpan={columns.length || 1}>
-                            Invalid row data: {typeof row} - {JSON.stringify(row)}
-                          </td>
+                          <th className="table-data-th">No columns defined</th>
                         )}
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
+                    </thead>
+                    <tbody className="table-data-tbody">
+                      {data.map((row, rowIndex) => {
+                        console.log(`Rendering row ${rowIndex}:`, row); // Debug
+                        return (
+                          <tr 
+                            key={rowIndex} 
+                            className="table-data-row"
+                            style={{ animationDelay: `${rowIndex * 0.05}s` }}
+                          >
+                            {Array.isArray(row) ? (
+                              row.map((cell, cellIndex) => {
+                                const cellValue = cell !== null && cell !== undefined ? String(cell) : '';
+                                console.log(`Cell [${rowIndex}][${cellIndex}]:`, cell, '-> displayed as:', cellValue); // Debug
+                                return (
+                                  <td key={cellIndex} className="table-data-td">
+                                    <div className="table-data-cell-content">
+                                      {cellValue || <span className="table-data-null">NULL</span>}
+                                    </div>
+                                  </td>
+                                );
+                              })
+                            ) : (
+                              <td colSpan={columns.length || 1} className="table-data-td">
+                                Invalid row data: {typeof row} - {JSON.stringify(row)}
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
-              {totalPages > 1 && (
-                <div className="d-flex justify-content-center mt-4">
-                  <Pagination>
-                    <Pagination.First 
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="table-data-pagination">
+                    <button
                       onClick={() => handlePageChange(1)}
                       disabled={currentPage === 1}
-                    />
-                    <Pagination.Prev 
+                      className="table-data-pagination-btn table-data-pagination-prev"
+                    >
+                      ← First
+                    </button>
+                    <button
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage === 1}
-                    />
-                    
-                    {[...Array(Math.min(totalPages, 10))].map((_, index) => {
-                      const page = index + 1;
-                      return (
-                        <Pagination.Item
-                          key={page}
-                          active={page === currentPage}
-                          onClick={() => handlePageChange(page)}
-                        >
-                          {page}
-                        </Pagination.Item>
-                      );
-                    })}
-                    
-                    <Pagination.Next 
+                      className="table-data-pagination-btn table-data-pagination-prev"
+                    >
+                      ← Previous
+                    </button>
+
+                    <div className="table-data-pagination-pages">
+                      {[...Array(Math.min(totalPages, 10))].map((_, index) => {
+                        const page = index + 1;
+                        return (
+                          <button
+                            key={page}
+                            onClick={() => handlePageChange(page)}
+                            className={`table-data-pagination-btn ${currentPage === page ? 'table-data-pagination-active' : ''}`}
+                          >
+                            {page}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages}
-                    />
-                    <Pagination.Last 
+                      className="table-data-pagination-btn table-data-pagination-next"
+                    >
+                      Next →
+                    </button>
+                    <button
                       onClick={() => handlePageChange(totalPages)}
                       disabled={currentPage === totalPages}
-                    />
-                  </Pagination>
-                </div>
-              )}
-            </>
-          ) : (
-            <Alert variant="info">No data found in this table.</Alert>
-          )}
-        </>
-      )}
+                      className="table-data-pagination-btn table-data-pagination-next"
+                    >
+                      Last →
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="table-data-empty-state">
+                <div className="table-data-empty-icon">📊</div>
+                <h3 className="table-data-empty-title">No data found</h3>
+                <p className="table-data-empty-subtitle">This table is empty</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 };

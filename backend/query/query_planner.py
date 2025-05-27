@@ -193,22 +193,34 @@ class QueryPlanner:
                 return value
     
     def _parse_insert(self, query: str) -> Dict[str, Any]:
-        # INSERT INTO table (columns) VALUES (values)
-        insert_pattern = r"INSERT\s+INTO\s+(\w+)\s*\((.+?)\)\s*VALUES\s*\((.+?)\)"
+        """Parse INSERT query"""
+        # INSERT INTO table (col1, col2) VALUES (val1, val2)
+        insert_pattern = r"INSERT\s+INTO\s+(\w+)\s*\(([^)]+)\)\s+VALUES\s*\(([^)]+)\)"
         match = re.match(insert_pattern, query, re.IGNORECASE)
         
         if not match:
-            raise ValueError("Invalid INSERT syntax")
+            raise ValueError("Invalid INSERT syntax. Expected: INSERT INTO table (columns) VALUES (values)")
         
         table, columns_str, values_str = match.groups()
-        columns = [col.strip() for col in columns_str.split(",")]
-        values = [val.strip().strip("'\"") for val in values_str.split(",")]
         
+        # Parse columns
+        columns = [col.strip() for col in columns_str.split(",")]
+        
+        # Parse values
+        values = []
+        for value in values_str.split(","):
+            value = value.strip()
+            # Remove quotes if present
+            if (value.startswith("'") and value.endswith("'")) or (value.startswith('"') and value.endswith('"')):
+                values.append(value[1:-1])
+            else:
+                values.append(value)
+    
         return {
             "type": "INSERT",
             "table": table.lower(),
             "columns": columns,
-            "values": [self._convert_value(val) for val in values]
+            "values": values
         }
     
     def _parse_delete(self, query: str) -> Dict[str, Any]:
@@ -253,6 +265,80 @@ class QueryPlanner:
             "where": self._parse_where_clause(where_clause) if where_clause else None
         }
     
+
+    async def _execute_select(self, parsed_query: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+        """Execute SELECT query"""
+        table_name = parsed_query["table"]
+        requested_columns = parsed_query["columns"]
+        where_conditions = parsed_query.get("where")
+        order_by = parsed_query.get("order_by")
+        limit = parsed_query.get("limit")
+        
+        # Get table metadata
+        table_metadata = self.catalog.get_table_metadata(table_name, user_id)
+        if not table_metadata:
+            raise ValueError(f"Table {table_name} not found")
+        
+        # Get data file path
+        data_file_path = table_metadata.get("data_file")
+        if not data_file_path or not os.path.exists(data_file_path):
+            raise ValueError(f"Data file not found for table {table_name}")
+        
+        # Load table data
+        table_data = await self._load_table_data(data_file_path)
+        
+        # Get column names from metadata
+        all_columns = [col["name"] for col in table_metadata["columns"]]
+        
+        # Determine which columns to select
+        if requested_columns == ["*"]:
+            selected_columns = all_columns
+            column_indices = list(range(len(all_columns)))
+        else:
+            selected_columns = []
+            column_indices = []
+            for col in requested_columns:
+                col = col.strip().lower()
+                if col in all_columns:
+                    selected_columns.append(col)
+                    column_indices.append(all_columns.index(col))
+                else:
+                    raise ValueError(f"Column {col} not found in table {table_name}")
+        
+        # Apply WHERE conditions if present
+        filtered_data = table_data
+        if where_conditions:
+            filtered_data = await self._apply_where_conditions(
+                table_data, where_conditions, table_metadata, user_id
+            )
+        
+        # Select only requested columns
+        result_data = []
+        for row in filtered_data:
+            selected_row = [row[i] for i in column_indices]
+            result_data.append(selected_row)
+        
+        # Apply ORDER BY (simplified implementation)
+        if order_by:
+            order_column = order_by.strip().lower()
+            if order_column in selected_columns:
+                order_index = selected_columns.index(order_column)
+                result_data.sort(key=lambda x: x[order_index] if x[order_index] is not None else "")
+        
+        # Apply LIMIT
+        if limit:
+            result_data = result_data[:limit]
+        
+        # Preparar respuesta con todos los campos requeridos
+        return {
+            "columns": selected_columns,
+            "data": result_data,
+            "page": 1,
+            "total_pages": 1,
+            "current_page": 1,
+            "rows_affected": len(result_data),
+            "io_operations": 1
+        }
 
 
     async def _load_table_data(self, file_path: str) -> List[List]:
@@ -408,33 +494,15 @@ class QueryPlanner:
     
     
     async def _execute_insert(self, parsed_query: Dict[str, Any], user_id: int) -> Dict[str, Any]:
-        # Placeholder for INSERT implementation
-        return {
-            "columns": ["message"],
-            "data": [["INSERT not yet implemented"]]
-        }
-    
-    async def _execute_delete(self, parsed_query: Dict[str, Any], user_id: int) -> Dict[str, Any]:
-        # Placeholder for DELETE implementation
-        return {
-            "columns": ["message"],
-            "data": [["DELETE not yet implemented"]]
-        }
-    
-    async def _execute_update(self, parsed_query: Dict[str, Any], user_id: int) -> Dict[str, Any]:
-        # Placeholder for UPDATE implementation
-        return {
-            "columns": ["message"],
-            "data": [["UPDATE not yet implemented"]]
-        }
-    
-    async def _execute_select(self, parsed_query: Dict[str, Any], user_id: int) -> Dict[str, Any]:
-        """Execute SELECT query"""
+        """Execute INSERT query"""
         table_name = parsed_query["table"]
-        requested_columns = parsed_query["columns"]
-        where_conditions = parsed_query.get("where")
-        order_by = parsed_query.get("order_by")
-        limit = parsed_query.get("limit")
+        columns = parsed_query["columns"]
+        values = parsed_query["values"]
+        
+        print(f"=== EXECUTING INSERT ===")
+        print(f"Table: {table_name}")
+        print(f"Columns: {columns}")
+        print(f"Values: {values}")
         
         # Get table metadata
         table_metadata = self.catalog.get_table_metadata(table_name, user_id)
@@ -443,63 +511,122 @@ class QueryPlanner:
         
         # Get data file path
         data_file_path = table_metadata.get("data_file")
-        if not data_file_path or not os.path.exists(data_file_path):
-            raise ValueError(f"Data file not found for table {table_name}")
+        if not data_file_path:
+            raise ValueError(f"Data file path not found for table {table_name}")
         
-        # Load table data
-        table_data = await self._load_table_data(data_file_path)
-        
-        # Get column names from metadata
-        all_columns = [col["name"] for col in table_metadata["columns"]]
-        
-        # Determine which columns to select
-        if requested_columns == ["*"]:
-            selected_columns = all_columns
-            column_indices = list(range(len(all_columns)))
+        # Load existing table data
+        if os.path.exists(data_file_path):
+            existing_data = await self._load_table_data(data_file_path)
         else:
-            selected_columns = []
-            column_indices = []
-            for col in requested_columns:
-                col = col.strip().lower()
-                if col in all_columns:
-                    selected_columns.append(col)
-                    column_indices.append(all_columns.index(col))
-                else:
-                    raise ValueError(f"Column {col} not found in table {table_name}")
-        
-        # Apply WHERE conditions if present
-        filtered_data = table_data
-        if where_conditions:
-            filtered_data = await self._apply_where_conditions(
-                table_data, where_conditions, table_metadata, user_id
-            )
-        
-        # Select only requested columns
-        result_data = []
-        for row in filtered_data:
-            selected_row = [row[i] for i in column_indices]
-            result_data.append(selected_row)
-        
-        # Apply ORDER BY (simplified implementation)
-        if order_by:
-            order_column = order_by.strip().lower()
-            if order_column in selected_columns:
-                order_index = selected_columns.index(order_column)
-                result_data.sort(key=lambda x: x[order_index] if x[order_index] is not None else "")
-        
-        # Apply LIMIT
-        if limit:
-            result_data = result_data[:limit]
-        
-        # Preparar respuesta con todos los campos requeridos
+            existing_data = []
+    
+        # Get column definitions from metadata
+        table_columns = [col["name"].lower() for col in table_metadata["columns"]]
+        column_types = {col["name"].lower(): col["data_type"] for col in table_metadata["columns"]}
+    
+        print(f"Table columns: {table_columns}")
+        print(f"Column types: {column_types}")
+    
+        # Validate columns in INSERT
+        for col in columns:
+            if col.lower() not in table_columns:
+                raise ValueError(f"Column '{col}' does not exist in table '{table_name}'")
+    
+        # Validate number of values matches number of columns
+        if len(values) != len(columns):
+            raise ValueError(f"Number of values ({len(values)}) does not match number of columns ({len(columns)})")
+    
+        # Convert and validate values according to column types
+        converted_row = []
+        for i, col in enumerate(table_columns):
+            if col in [c.lower() for c in columns]:
+                # Find the value for this column
+                col_index = [c.lower() for c in columns].index(col)
+                value = values[col_index]
+            
+                # Convert value to appropriate type
+                data_type = column_types[col]
+                try:
+                    converted_value = self._convert_value_for_insert(value, data_type)
+                    converted_row.append(converted_value)
+                except Exception as e:
+                    raise ValueError(f"Error converting value '{value}' for column '{col}' (type {data_type}): {str(e)}")
+            else:
+                # Column not provided in INSERT, use default value (NULL or appropriate default)
+                converted_row.append(None)
+    
+        print(f"Converted row: {converted_row}")
+    
+        # Add the new row to existing data
+        existing_data.append(converted_row)
+    
+        # Save updated data back to file
+        await self._save_table_data(data_file_path, existing_data)
+    
+        print(f"=== INSERT COMPLETED ===")
+    
         return {
-            "columns": selected_columns,
-            "data": result_data,
+            "columns": ["message"],
+            "data": [["INSERT completed successfully. 1 row affected."]],
             "page": 1,
             "total_pages": 1,
             "current_page": 1,
-            "rows_affected": len(result_data),
+            "rows_affected": 1,
             "io_operations": 1
         }
+
+    def _convert_value_for_insert(self, value: str, data_type: str) -> Any:
+        """Convert string value to appropriate data type for INSERT"""
+        try:
+            if value.upper() == 'NULL':
+                return None
+            
+            if data_type == 'INT':
+                return int(value)
+            elif data_type == 'FLOAT':
+                return float(value)
+            elif data_type == 'VARCHAR':
+                # Remove quotes if present
+                if (value.startswith("'") and value.endswith("'")) or (value.startswith('"') and value.endswith('"')):
+                    return value[1:-1]
+                return str(value)
+            elif data_type == 'BOOLEAN':
+                return value.lower() in ('true', '1', 'yes', 'on')
+            elif data_type == 'DATE':
+                from datetime import datetime
+                # Try multiple date formats but return as string for JSON compatibility
+                for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']:
+                    try:
+                        parsed_date = datetime.strptime(value, fmt)
+                        return parsed_date.strftime('%Y-%m-%d')
+                    except ValueError:
+                        continue
+                raise ValueError(f"Cannot parse date: {value}")
+            else:
+                raise ValueError(f"Unsupported data type: {data_type}")
+        except Exception as e:
+            raise ValueError(f"Cannot convert '{value}' to {data_type}: {str(e)}")
+
+    async def _save_table_data(self, file_path: str, data: List[List[Any]]):
+        """Save table data to file"""
+        import json
+        import os
+    
+        print(f"=== SAVING TABLE DATA ===")
+        print(f"File: {file_path}")
+        print(f"Number of rows to save: {len(data)}")
+    
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+        
+            print(f"Data saved successfully")
+        
+        except Exception as e:
+            print(f"Error saving table data: {str(e)}")
+            raise ValueError(f"Failed to save table data: {str(e)}")
 
 

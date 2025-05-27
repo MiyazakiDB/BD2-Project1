@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Alert } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import { fileService } from '../../services/api';
+import './Files.css';
 
 const FileList = () => {
   const [files, setFiles] = useState([]);
@@ -14,18 +14,16 @@ const FileList = () => {
       setLoading(true);
       const response = await fileService.listFiles();
       setFiles(response.data);
-      setError(''); // Limpiar errores anteriores
+      setError('');
     } catch (err) {
       console.error('Error loading files:', err);
       
       if (err.response?.status === 401) {
         setError('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
         
-        // Verificar si el token existe pero es inválido
         const token = localStorage.getItem('token');
         if (token) {
           localStorage.removeItem('token');
-          // Opcional: redirigir al login después de un breve retraso
           setTimeout(() => navigate('/login'), 2000);
         }
       } else {
@@ -41,64 +39,133 @@ const FileList = () => {
   }, []);
 
   const handleDelete = async (filename) => {
-    if (window.confirm(`Are you sure you want to delete ${filename}?`)) {
+    if (window.confirm(`¿Estás seguro de que quieres eliminar ${filename}?`)) {
       try {
         await fileService.deleteFile(filename);
         fetchFiles();
       } catch (err) {
-        setError('Error deleting file. Please try again.');
+        setError('Error eliminando archivo. Por favor intenta de nuevo.');
         console.error(err);
       }
     }
   };
 
-  if (loading) return <div className="text-center mt-5">Loading files...</div>;
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
   return (
-    <div className="mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>My Files</h2>
-        <Button as={Link} to="/files/upload" variant="primary">
-          Upload New File
-        </Button>
-      </div>
-      
-      {error && <Alert variant="danger">{error}</Alert>}
-      
-      {loading ? (
-        <div className="text-center">Loading files...</div>
-      ) : files.length === 0 ? (
-        <Alert variant="info">You don't have any files yet. Upload your first file!</Alert>
-      ) : (
-        <Table striped bordered hover>
-          <thead>
-            <tr>
-              <th>Filename</th>
-              <th>Size</th>
-              <th>Upload Date</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {files.map((file) => (
-              <tr key={file.filename}>
-                <td>{file.filename}</td>
-                <td>{Math.round(file.size / 1024)} KB</td>
-                <td>{new Date(file.upload_date).toLocaleString()}</td>
-                <td>
-                  <Button 
-                    variant="danger" 
-                    size="sm"
+    <div className="files-container">
+      <div className="files-wrapper">
+        {/* Header */}
+        <div className="files-header">
+          <div className="files-header-content">
+            <div className="files-title-section">
+              <h1 className="files-main-title">📁 File Manager</h1>
+              <p className="files-subtitle">Manage your uploaded data files with ease</p>
+            </div>
+            <Link to="/files/upload" className="files-upload-btn">
+              📤 Upload New File
+            </Link>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="files-stats-grid">
+            <div className="files-stat-card">
+              <div className="files-stat-icon">📄</div>
+              <div className="files-stat-info">
+                <p className="files-stat-label">Total Files</p>
+                <p className="files-stat-value">{files.length}</p>
+              </div>
+            </div>
+            
+            <div className="files-stat-card">
+              <div className="files-stat-icon">💾</div>
+              <div className="files-stat-info">
+                <p className="files-stat-label">Total Size</p>
+                <p className="files-stat-value">
+                  {formatFileSize(files.reduce((acc, file) => acc + file.size, 0))}
+                </p>
+              </div>
+            </div>
+
+            <div className="files-stat-card">
+              <div className="files-stat-icon">📅</div>
+              <div className="files-stat-info">
+                <p className="files-stat-label">Last Upload</p>
+                <p className="files-stat-value">{files.length > 0 ? 'Today' : 'None'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="files-error-alert">
+            ❌ {error}
+          </div>
+        )}
+
+        {/* Loading State chuta */}
+        {loading ? (
+          <div className="files-loading-container">
+            <div className="files-loading-spinner"></div>
+            <p className="files-loading-text">Loading your files...</p>
+          </div>
+        ) : files.length === 0 ? (
+          /* Empty State */
+          <div className="files-empty-state">
+            <div className="files-empty-icon">📂</div>
+            <h3 className="files-empty-title">No files found</h3>
+            <p className="files-empty-subtitle">Upload your first data file to get started</p>
+            <Link to="/files/upload" className="files-empty-upload-btn">
+              📤 Upload Your First File
+            </Link>
+          </div>
+        ) : (
+          /* Files Grid */
+          <div className="files-grid">
+            {files.map((file, index) => (
+              <div
+                key={file.filename}
+                className="files-card"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <div className="files-card-header">
+                  <div className="files-card-icon">📄</div>
+                  <button
                     onClick={() => handleDelete(file.filename)}
+                    className="files-delete-btn"
                   >
-                    Delete
-                  </Button>
-                </td>
-              </tr>
+                    🗑️
+                  </button>
+                </div>
+                
+                <h3 className="files-card-title">{file.filename}</h3>
+                
+                <div className="files-card-details">
+                  <div className="files-card-detail">
+                    <span>Size:</span>
+                    <span>{formatFileSize(file.size)}</span>
+                  </div>
+                  <div className="files-card-detail">
+                    <span>Uploaded:</span>
+                    <span>{new Date(file.upload_date).toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                <div className="files-card-progress">
+                  <div className="files-progress-bar"></div>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </Table>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

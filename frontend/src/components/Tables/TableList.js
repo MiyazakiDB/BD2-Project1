@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Table, Button, Alert } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { tableService } from '../../services/api';
+import './Tables.css';
 
 const TableList = () => {
   const [tables, setTables] = useState([]);
@@ -48,62 +49,123 @@ const TableList = () => {
     }
   };
 
-  if (loading) return <div className="text-center mt-5">Loading tables...</div>;
+  if (loading) return <div className="tables-loading-container">
+    <div className="tables-loading-spinner"></div>
+    <p className="tables-loading-text">Loading tables...</p>
+  </div>;
 
   return (
-    <div className="mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>My Tables</h2>
-        <Button as={Link} to="/tables/create" variant="primary">
-          Create New Table
-        </Button>
-      </div>
-      
-      {error && <Alert variant="danger">{error}</Alert>}
-      
-      {tables.length === 0 ? (
-        <Alert variant="info">You don't have any tables yet. Create your first table!</Alert>
-      ) : (
-        <Table striped bordered hover>
-          <thead>
-            <tr>
-              <th>Table Name</th>
-              <th>Columns</th>
-              <th>Row Count</th>
-              <th>Created Date</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tables.map((table) => (
-              <tr key={table.name}>
-                <td>{table.name}</td>
-                <td>{table.columns?.length || 0}</td>
-                <td>{table.row_count || 0}</td>
-                <td>{new Date(table.created_at).toLocaleString()}</td>
-                <td>
-                  <Button 
-                    variant="primary" 
-                    size="sm"
-                    as={Link}
-                    to={`/tables/${table.name}`}
-                    className="me-2"
-                  >
-                    View Data
-                  </Button>
-                  <Button 
-                    variant="danger" 
-                    size="sm"
+    <div className="tables-container">
+      <div className="tables-wrapper">
+        {/* Header */}
+        <div className="tables-header">
+          <div className="tables-header-content">
+            <div className="tables-title-section">
+              <h1 className="tables-main-title">🗃️ Database Tables</h1>
+              <p className="tables-subtitle">Manage your database tables and structures</p>
+            </div>
+            <Link to="/tables/create" className="tables-create-btn">
+              ➕ Create New Table
+            </Link>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="tables-stats-grid">
+            <div className="tables-stat-card">
+              <div className="tables-stat-icon">📊</div>
+              <div className="tables-stat-info">
+                <p className="tables-stat-label">Total Tables</p>
+                <p className="tables-stat-value">{tables.length}</p>
+              </div>
+            </div>
+            
+            <div className="tables-stat-card">
+              <div className="tables-stat-icon">🔗</div>
+              <div className="tables-stat-info">
+                <p className="tables-stat-label">Active Connections</p>
+                <p className="tables-stat-value">1</p>
+              </div>
+            </div>
+
+            <div className="tables-stat-card">
+              <div className="tables-stat-icon">⚡</div>
+              <div className="tables-stat-info">
+                <p className="tables-stat-label">Status</p>
+                <p className="tables-stat-value">Online</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Error Alert */}
+        {error && (
+          <div className="tables-error-alert">
+            ❌ {error}
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading ? (
+          <div className="tables-loading-container">
+            <div className="tables-loading-spinner"></div>
+            <p className="tables-loading-text">Loading your tables...</p>
+          </div>
+        ) : tables.length === 0 ? (
+          /* Empty State */
+          <div className="tables-empty-state">
+            <div className="tables-empty-icon">🗃️</div>
+            <h3 className="tables-empty-title">No tables found</h3>
+            <p className="tables-empty-subtitle">Create your first database table to get started</p>
+            <Link to="/tables/create" className="tables-empty-create-btn">
+              ➕ Create Your First Table
+            </Link>
+          </div>
+        ) : (
+          /* Tables Grid */
+          <div className="tables-grid">
+            {tables.map((table, index) => (
+              <div
+                key={table.name}
+                className="tables-card"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                <div className="tables-card-header">
+                  <div className="tables-card-icon">🗃️</div>
+                  <button
                     onClick={() => handleDelete(table.name)}
+                    className="tables-delete-btn"
                   >
-                    Delete
-                  </Button>
-                </td>
-              </tr>
+                    🗑️
+                  </button>
+                </div>
+                
+                <h3 className="tables-card-title">{table.name}</h3>
+                
+                <div className="tables-card-details">
+                  <div className="tables-card-detail">
+                    <span>Columns:</span>
+                    <span>{table.columns?.length || 0}</span>
+                  </div>
+                  <div className="tables-card-detail">
+                    <span>Rows:</span>
+                    <span>{table.row_count?.toLocaleString() || 0}</span>
+                  </div>
+                  <div className="tables-card-detail">
+                    <span>Created:</span>
+                    <span>{new Date(table.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                <div className="tables-card-actions">
+                  <Link to={`/tables/${table.name}`} className="tables-view-btn">
+                    👁️ View Data
+                  </Link>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </Table>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
