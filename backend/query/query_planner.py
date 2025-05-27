@@ -402,7 +402,7 @@ class QueryPlanner:
         columns = [col["name"] for col in table_metadata["columns"]]
         filtered_data = []
 
-        # Intenta usar índices si están disponibles
+        # Intenta usar índices si están disponibless
         for cond in conditions:
             col = cond["column"]
             op = cond["operator"]
