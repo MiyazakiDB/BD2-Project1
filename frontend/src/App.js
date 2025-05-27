@@ -43,8 +43,7 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    setIsAuthenticated(false);
-    navigate('/login');
+    window.location.href = '/login';
   };
 
   return (
@@ -63,7 +62,7 @@ function App() {
               <ProtectedRoute>
                 <Row>
                   <Col md={3} lg={2} className="sidebar">
-                    <Sidebar />
+                    <Sidebar onLogout={handleLogout} />
                   </Col>
                   <Col md={9} lg={10} className="content-area">
                     <Routes>

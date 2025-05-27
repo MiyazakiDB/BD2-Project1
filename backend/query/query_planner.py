@@ -96,88 +96,105 @@ class QueryPlanner:
     def _parse_select(self, query: str) -> Dict[str, Any]:
         # Remove SELECT keyword and normalize
         query_without_select = query[6:].strip()  # Remove "SELECT"
-        
+
         print(f"=== PARSE SELECT DEBUG ===")
         print(f"Original query: {query}")
         print(f"Query without SELECT: {query_without_select}")
-        
+
         # Find FROM clause
         from_match = re.search(r'\bFROM\s+(\w+)', query_without_select, re.IGNORECASE)
         if not from_match:
             raise ValueError("Missing FROM clause in SELECT statement")
-        
+
         table_name = from_match.group(1).lower()
         print(f"Table name: {table_name}")
-        
+
         # Extract column list (everything before FROM)
         columns_part = query_without_select[:from_match.start()].strip()
         if columns_part == "*":
             columns = ["*"]
         else:
             columns = [col.strip().lower() for col in columns_part.split(",")]
-        
+
         print(f"Columns: {columns}")
-        
+
         # Parse optional clauses (WHERE, ORDER BY, LIMIT)
         remaining_query = query_without_select[from_match.end():].strip()
-        
+
         where_conditions = None
         order_by = None
         limit = None
-        
-        if remaining_query:
-            # Parse WHERE clause
-            where_match = re.search(r'\bWHERE\s+(.+?)(?:\s+ORDER\s+BY|\s+LIMIT|$)', remaining_query, re.IGNORECASE)
-            if where_match:
-                where_conditions = self._parse_where_clause(where_match.group(1))
-            
-            # Parse ORDER BY clause
-            order_match = re.search(r'\bORDER\s+BY\s+(\w+)', remaining_query, re.IGNORECASE)
-            if order_match:
-                order_by = order_match.group(1).lower()
-            
-            # Parse LIMIT clause
-            limit_match = re.search(r'\bLIMIT\s+(\d+)', remaining_query, re.IGNORECASE)
-            if limit_match:
-                limit = int(limit_match.group(1))
-        
+
+        # --- MEJORAR AQUÍ ---
+        # Extraer WHERE, ORDER BY y LIMIT de forma robusta
+        where_clause = None
+        order_by_clause = None
+        limit_clause = None
+
+        # Busca WHERE
+        where_match = re.search(r'\bWHERE\s+(.+?)(?=\s+ORDER\s+BY|\s+LIMIT|$)', remaining_query, re.IGNORECASE)
+        if where_match:
+            where_clause = where_match.group(1).strip()
+
+        # Busca ORDER BY
+        order_match = re.search(r'\bORDER\s+BY\s+(\w+)', remaining_query, re.IGNORECASE)
+        if order_match:
+            order_by_clause = order_match.group(1).lower()
+
+        # Busca LIMIT
+        limit_match = re.search(r'\bLIMIT\s+(\d+)', remaining_query, re.IGNORECASE)
+        if limit_match:
+            limit_clause = int(limit_match.group(1))
+
+        if where_clause:
+            where_conditions = self._parse_where_clause(where_clause)
+        else:
+            where_conditions = []
+
         result = {
             "type": "SELECT",
             "table": table_name,
             "columns": columns,
             "where": where_conditions,
-            "order_by": order_by,
-            "limit": limit
+            "order_by": order_by_clause,
+            "limit": limit_clause
         }
-        
+
         print(f"Parsed result: {result}")
         print(f"=== END PARSE SELECT DEBUG ===")
-        
+
         return result
     
     def _parse_where_clause(self, where_clause: str) -> List[Dict[str, Any]]:
-        # Simple WHERE parser for conditions like: column = value, column > value, etc.
         conditions = []
-        
-        # Split by AND/OR (simplified)
+        # Soporta BETWEEN
+        between_match = re.match(r"(\w+)\s+BETWEEN\s+(.+)\s+AND\s+(.+)", where_clause, re.IGNORECASE)
+        if between_match:
+            column, start, end = between_match.groups()
+            start_val = self._convert_value(start.strip())
+            end_val = self._convert_value(end.strip())
+            print(f"DEBUG PARSED BETWEEN: {column} BETWEEN {start_val} ({type(start_val)}) AND {end_val} ({type(end_val)})")
+            conditions.append({
+                "column": column.lower(),
+                "operator": "BETWEEN",
+                "value": [start_val, end_val],
+                "logical_op": None
+            })
+            return conditions
+        # Soporta condiciones normales
         parts = re.split(r'\s+(AND|OR)\s+', where_clause, flags=re.IGNORECASE)
-        
         for i in range(0, len(parts), 2):
             condition_str = parts[i].strip()
             operator_match = re.match(r'(\w+)\s*(=|!=|<|>|<=|>=)\s*(.+)', condition_str)
-            
             if operator_match:
                 column, operator, value = operator_match.groups()
-                # Remove quotes from string values
                 value = value.strip().strip("'\"")
-                
                 conditions.append({
                     "column": column.lower(),
                     "operator": operator,
                     "value": self._convert_value(value),
                     "logical_op": parts[i+1].upper() if i+1 < len(parts) else None
                 })
-        
         return conditions
     
     def _convert_value(self, value: str) -> Any:
@@ -382,15 +399,129 @@ class QueryPlanner:
         self, data: List[List[Any]], conditions: List[Dict[str, Any]], 
         table_metadata: Dict[str, Any], user_id: int
     ) -> List[List[Any]]:
-        
         columns = [col["name"] for col in table_metadata["columns"]]
+        # Solo soporta un índice por ahora (el primero que pueda usar índice)
+        for cond in conditions:
+            col = cond["column"]
+            op = cond["operator"]
+            if col in table_metadata.get("indices", {}) and op in ("=", "BETWEEN"):
+                # Usar índice
+                index_info = table_metadata["indices"][col]
+                index_type = index_info["type"]
+                index_name = index_info["name"]
+                index = self.index_interface.get_index(index_name)
+                if not index:
+                    # Cargar el índice si no está en memoria
+                    index_file = index_info["file"]
+                    index = self.index_interface.load_index(index_type, index_name, index_file)
+                # Buscar filas usando el índice
+                if op == "=":
+                    row_indices = index.search(cond["value"])
+                    if not isinstance(row_indices, list):
+                        row_indices = [row_indices] if row_indices is not None else []
+                elif op == "BETWEEN":
+                    start, end = cond["value"]
+                    row_indices = index.range_search(start, end)
+                else:
+                    row_indices = []
+                # Filtrar data por índices encontrados
+                filtered_data = [data[i] for i in row_indices if i is not None and i < len(data)]
+                return filtered_data
+        # Si no hay índice aplicable, usar el método normal
         filtered_data = []
-        
         for row in data:
             if await self._evaluate_conditions(row, conditions, columns, table_metadata, user_id):
                 filtered_data.append(row)
-        
         return filtered_data
+    
+
+
+    def _evaluate_condition(self, row_value: Any, operator: str, condition_value: Any) -> bool:
+        # Añadir logs para debug
+        print(f"DEBUG EVALUATE: {row_value} ({type(row_value)}) {operator} {condition_value} ({type(condition_value)})")
+    
+        if operator == "=":
+            return str(row_value) == str(condition_value)  # Comparación robusta como strings
+        elif operator == "!=":
+            return str(row_value) != str(condition_value)  # Comparación robusta como strings
+        elif operator == "<":
+            # Intentar comparación numérica si es posible
+            try:
+                if isinstance(row_value, (int, float)) and not isinstance(condition_value, (int, float)):
+                    condition_value = float(condition_value)
+                elif not isinstance(row_value, (int, float)) and isinstance(condition_value, (int, float)):
+                    row_value = float(row_value)
+                return row_value < condition_value
+            except (ValueError, TypeError):
+                # Fallback a comparación de strings
+                return str(row_value) < str(condition_value)
+        elif operator == ">":
+            # Mismo enfoque que para "<"
+            try:
+                if isinstance(row_value, (int, float)) and not isinstance(condition_value, (int, float)):
+                    condition_value = float(condition_value)
+                elif not isinstance(row_value, (int, float)) and isinstance(condition_value, (int, float)):
+                    row_value = float(row_value)
+                return row_value > condition_value
+            except (ValueError, TypeError):
+                return str(row_value) > str(condition_value)
+        elif operator == "<=":
+            # Mismo enfoque
+            try:
+                if isinstance(row_value, (int, float)) and not isinstance(condition_value, (int, float)):
+                    condition_value = float(condition_value)
+                elif not isinstance(row_value, (int, float)) and isinstance(condition_value, (int, float)):
+                    row_value = float(row_value)
+                return row_value <= condition_value
+            except (ValueError, TypeError):
+                return str(row_value) <= str(condition_value)
+        elif operator == ">=":
+            # Mismo enfoque
+            try:
+                if isinstance(row_value, (int, float)) and not isinstance(condition_value, (int, float)):
+                    condition_value = float(condition_value)
+                elif not isinstance(row_value, (int, float)) and isinstance(condition_value, (int, float)):
+                    row_value = float(row_value)
+                return row_value >= condition_value
+            except (ValueError, TypeError):
+                return str(row_value) >= str(condition_value)
+        elif operator == "BETWEEN":
+            # Tratamiento especial para BETWEEN
+            try:
+                start, end = condition_value
+                print(f"DEBUG BETWEEN: {start} ({type(start)}) AND {end} ({type(end)})")
+            
+                # Si row_value es numérico, intenta convertir start y end
+                if isinstance(row_value, (int, float)):
+                    try:
+                        start = float(start)
+                        end = float(end)
+                    except (ValueError, TypeError):
+                        # Si la conversión falla, convierte todo a string
+                        row_value = str(row_value)
+                        start = str(start)
+                        end = str(end)
+                else:
+                    # Si row_value no es numérico, convierte todo a string
+                    row_value = str(row_value)
+                    start = str(start)
+                    end = str(end)
+            
+                print(f"DEBUG AFTER CONVERSION: {row_value} ({type(row_value)}) BETWEEN {start} ({type(start)}) AND {end} ({type(end)})")
+                result = start <= row_value <= end
+                print(f"DEBUG RESULT: {result}")
+                return result
+            except Exception as e:
+                print(f"DEBUG ERROR IN BETWEEN: {str(e)}")
+                # Último recurso: intenta como strings
+                try:
+                    start, end = condition_value
+                    return str(start) <= str(row_value) <= str(end)
+                except:
+                    return False
+        else:
+            raise ValueError(f"Unsupported operator: {operator}")
+        
     
     async def _evaluate_conditions(
         self, row: List[Any], conditions: List[Dict[str, Any]], 
@@ -432,21 +563,7 @@ class QueryPlanner:
         
         return result
     
-    def _evaluate_condition(self, row_value: Any, operator: str, condition_value: Any) -> bool:
-        if operator == "=":
-            return row_value == condition_value
-        elif operator == "!=":
-            return row_value != condition_value
-        elif operator == "<":
-            return row_value < condition_value
-        elif operator == ">":
-            return row_value > condition_value
-        elif operator == "<=":
-            return row_value <= condition_value
-        elif operator == ">=":
-            return row_value >= condition_value
-        else:
-            raise ValueError(f"Unsupported operator: {operator}")
+    
     
     async def _evaluate_with_index(
         self, table_metadata: Dict[str, Any], column_name: str, 

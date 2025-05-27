@@ -24,29 +24,17 @@ const QueryExecutor = () => {
 
     try {
       console.log('=== STARTING QUERY EXECUTION ===');
-      console.log('Query to execute:', query);
-      
+      console.log('Query to execute:', query); // Verifica que la consulta sea correcta
+
       const response = await queryService.executeQuery(query);
-      
+
       console.log('=== RAW RESPONSE FROM API SERVICE ===');
       console.log('Full response:', response);
-      console.log('Response type:', typeof response);
-      console.log('Response keys:', Object.keys(response || {}));
-      console.log('Response.columns:', response?.columns);
-      console.log('Response.data:', response?.data);
-      console.log('=== END RESPONSE ANALYSIS ===');
-      
-      // CORRECCIÓN: response ya es el objeto correcto
-      setResults(response);  // ✅ Usar response directamente
+      setResults(response);
       setExecutionTime(response?.execution_time_ms || 0);
-      
     } catch (err) {
       console.error('=== QUERY EXECUTION ERROR ===');
       console.error('Error object:', err);
-      console.error('Error response:', err.response);
-      console.error('Error message:', err.message);
-      console.error('=== END ERROR ===');
-      
       setError(err.response?.data?.detail || err.message || 'Error executing query. Please check syntax and try again.');
     } finally {
       setLoading(false);

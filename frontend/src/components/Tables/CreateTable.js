@@ -14,6 +14,15 @@ const CreateTable = () => {
   const [hasHeaders, setHasHeaders] = useState(true);
 
   const dataTypes = ['INT', 'FLOAT', 'VARCHAR', 'BOOLEAN', 'DATE'];
+  const indexTypes = [
+    { value: '', label: 'No Index' },
+    { value: 'AVL', label: 'AVL' },
+    { value: 'HASH', label: 'Hash' },
+    { value: 'BTREE', label: 'B+Tree' },
+    { value: 'GIN', label: 'GIN' },
+    { value: 'ISAM', label: 'ISAM' },
+    { value: 'RTREE', label: 'RTree' }
+  ];
 
   const handleColumnChange = (index, field, value) => {
     const newColumns = [...columns];
@@ -59,7 +68,7 @@ const CreateTable = () => {
           name: col.name,
           data_type: col.data_type,
           size: col.data_type === 'VARCHAR' ? col.size || 255 : null,
-          index_type: col.is_indexed ? col.index_type || 'BTREE' : null,
+          index_type: col.is_indexed && col.index_type ? col.index_type : null,
         }))
       )
     );
@@ -205,6 +214,16 @@ const CreateTable = () => {
                         />
                         <span className="create-table-checkbox-text">Create Index</span>
                       </label>
+                      <select
+                        value={column.index_type || ''}
+                        onChange={e => handleColumnChange(index, 'index_type', e.target.value)}
+                        className="create-table-column-select"
+                        disabled={!column.is_indexed}
+                      >
+                        {indexTypes.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
                     </div>
 
                     {columns.length > 1 && (
