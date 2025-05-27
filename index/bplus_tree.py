@@ -1,416 +1,562 @@
+import struct
 import os
-import pickle
 import json
-import shutil
 from bisect import bisect_left, bisect_right
 
 DEFAULT_ORDER = 4
+KEY_FORMAT = 'i'
+HEADER_SIZE = 4
 
 class BPlusTreeNode:
-    def __init__(self, parent=None):
-        self.parent = parent
+    def __init__(self, order, is_leaf=False, parent_pos=-1, pos=-1):
+        self.order = order
+        self.parent_pos = parent_pos
+        self.pos = pos
         self.keys = []
+        self.is_leaf = is_leaf
 
-    def is_full(self, order):
-        return len(self.keys) >= order
+    def is_full(self):
+        return len(self.keys) >= self.order - 1
 
-    def is_underflow(self, order, is_root):
-        if is_root:
-            return not self.is_leaf() and len(self.keys) < 1
-        return len(self.keys) < (order // 2)
+    def is_underflow(self):
+        return len(self.keys) < (self.order - 1) // 2
 
-    def is_leaf(self):
-        return isinstance(self, BPlusTreeLeaf)
+    def is_root(self):
+        return self.parent_pos == -1
 
 class BPlusTreeLeaf(BPlusTreeNode):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.positions = []
-        self.next_leaf = None
-        self.prev_leaf = None
+    def __init__(self, order, parent_pos=-1, pos=-1):
+        super().__init__(order, is_leaf=True, parent_pos=parent_pos, pos=pos)
+        self.pointers = []
+        self.next_leaf_pos = -1
+        self.prev_leaf_pos = -1
 
     def insert(self, key, position):
         idx = bisect_left(self.keys, key)
         self.keys.insert(idx, key)
-        self.positions.insert(idx, position)
+        self.pointers.insert(idx, position)
 
-    def delete(self, key):
+    def delete_key_and_pointer(self, key):
         try:
             idx = self.keys.index(key)
             del self.keys[idx]
-            del self.positions[idx]
+            del self.pointers[idx]
             return True
         except ValueError:
             return False
 
 class BPlusTreeInternal(BPlusTreeNode):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.children = []
+    def __init__(self, order, parent_pos=-1, pos=-1):
+        super().__init__(order, is_leaf=False, parent_pos=parent_pos, pos=pos)
+        self.pointers = []
 
-class BPlusTreeFile:
-    def __init__(self, data_file="bplus_data.jsonl", index_file="bplus_index.bpt", order=DEFAULT_ORDER):
-        self.data_file = data_file
-        self.index_file = index_file
-
+class NodeManager:
+    def __init__(self, index_file_path, order, key_format='i'):
+        self.index_file_path = index_file_path
         self.order = order
-        self.root = None
-        self._load_index()
+        self.key_format = key_format
+        self.key_size = struct.calcsize(key_format)
+        self.empty_key = 0 if key_format == 'i' else 0.0
 
-        if not os.path.exists(self.data_file):
-            with open(self.data_file, "w", encoding="utf-8") as f:
-                pass
+        self.node_struct_format_base = f"<i i i i i {(order - 1)}{key_format} {order}i"
+        self.node_size_unpadded = struct.calcsize(self.node_struct_format_base)
 
-    def _save_index(self):
-        if self.root is None:
-            print("Warning: intentandp guardar un indice con root None")
-            if os.path.exists(self.index_file):
-                try:
-                    os.remove(self.index_file)
-                except OSError as e:
-                    print(f"Error al eliminar el archivo de indice para root None: {e}")
-            return
+        self.node_size = self.node_size_unpadded
+        self.node_struct_format = self.node_struct_format_base
 
-        data_to_pickle = (self.order, self.root)
-        with open(self.index_file, "wb") as f:
-            pickle.dump(data_to_pickle, f)
+        self.file = None
+        self._ensure_file_exists()
 
-    def _load_index(self):
-        if os.path.exists(self.index_file) and os.path.getsize(self.index_file) > 0:
-            try:
-                with open(self.index_file, "rb") as f:
-                    persisted_order, persisted_root = pickle.load(f)
+    def _ensure_file_exists(self):
+        if not os.path.exists(self.index_file_path):
+            self.open_file('wb')
+            self.write_header(-1)
+            self.close_file()
 
-                if self.order != persisted_order:
-                    print(f"Warning: el 'order' ({self.order}) al inicializar B+ Tree File difiere del 'order' ({persisted_order}) en el archivo de indice '{self.index_file}', se usara el 'order' del archivo de indice")
-                    self.order = persisted_order
-                self.root = persisted_root
-            except Exception as e:
-                print(f"Error: no se pudo cargar el archivo de indice B+ Tree '{self.index_file}'. Error: {e}.")
-                self.root = BPlusTreeLeaf()
+    def open_file(self, mode='rb+'):
+        if self.file is None or self.file.closed:
+            if mode == 'rb+' and not os.path.exists(self.index_file_path):
+                self._ensure_file_exists()
+            self.file = open(self.index_file_path, mode)
+
+    def close_file(self):
+        if self.file and not self.file.closed:
+            self.file.flush()
+            os.fsync(self.file.fileno())
+            self.file.close()
+            self.file = None
+
+    def read_header(self):
+        self.open_file('rb')
+        self.file.seek(0)
+        data = self.file.read(HEADER_SIZE)
+        return struct.unpack("<i", data)[0]
+
+    def write_header(self, root_pos):
+        self.open_file('rb+')
+        self.file.seek(0)
+        self.file.write(struct.pack("<i", root_pos))
+
+    def _pack_node(self, node: BPlusTreeNode):
+        keys_to_pack = list(node.keys)
+        while len(keys_to_pack) < self.order - 1:
+            keys_to_pack.append(self.empty_key)
+
+        pointers_to_pack = []
+        pointers_to_pack = list(node.pointers)
+
+        while len(pointers_to_pack) < self.order:
+            pointers_to_pack.append(-1)
+
+        next_l = node.next_leaf_pos if node.is_leaf else -1
+        prev_l = node.prev_leaf_pos if node.is_leaf else -1
+
+        packed_data = struct.pack(
+            self.node_struct_format,
+            1 if node.is_leaf else 0,
+            len(node.keys),
+            node.parent_pos,
+            next_l,
+            prev_l,
+            *keys_to_pack,
+            *pointers_to_pack
+        )
+        return packed_data
+
+    def _unpack_node(self, data: bytes, pos: int) -> BPlusTreeNode:
+        unpacked = struct.unpack(self.node_struct_format, data)
+        is_leaf_val, actual_size, parent_pos, next_leaf_pos, prev_leaf_pos = unpacked[:5]
+
+        keys_from_struct = list(unpacked[5 : 5 + self.order - 1])
+        pointers_from_struct = list(unpacked[5 + self.order - 1 : 5 + self.order - 1 + self.order])
+        active_keys = keys_from_struct[:actual_size]
+
+        if is_leaf_val == 1:
+            node = BPlusTreeLeaf(self.order, parent_pos, pos)
+            node.pointers = pointers_from_struct[:actual_size]
+            node.next_leaf_pos = next_leaf_pos
+            node.prev_leaf_pos = prev_leaf_pos
         else:
-            self.root = BPlusTreeLeaf()
+            node = BPlusTreeInternal(self.order, parent_pos, pos)
+            node.pointers = pointers_from_struct[:actual_size + 1]
+
+        node.keys = active_keys
+        return node
+
+    def read_node(self, pos: int) -> BPlusTreeNode | None:
+        if pos == -1:
+            return None
+        self.open_file('rb')
+        offset = HEADER_SIZE + pos * self.node_size
+        self.file.seek(offset)
+        data = self.file.read(self.node_size)
+        if not data or len(data) < self.node_size:
+            raise IOError(f"Error: No se pudo leer el nodo completo en la posicion {pos}. Se esperaban {self.node_size} bytes, se obtuvieron {len(data)}.")
+        return self._unpack_node(data, pos)
+
+    def write_node(self, node: BPlusTreeNode) -> int:
+        self.open_file('rb+')
+        if node.pos == -1:
+            self.file.seek(0, 2)
+            offset_from_start = self.file.tell()
+            node.pos = (offset_from_start - HEADER_SIZE) // self.node_size
+        else:
+            offset_from_start = HEADER_SIZE + node.pos * self.node_size
+            self.file.seek(offset_from_start)
+
+        packed_data = self._pack_node(node)
+        self.file.write(packed_data)
+        return node.pos
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close_file()
+
+class BPlusTree:
+    def __init__(self, data_file="data.jsonl", index_file="index.bpt", order=DEFAULT_ORDER, key_format=KEY_FORMAT):
+        self.data_file_path = data_file
+        self.order = order
+        self.node_manager = NodeManager(index_file, order, key_format)
+
+        if not os.path.exists(self.data_file_path):
+            with open(self.data_file_path, "w", encoding="utf-8") as f:
+                pass
 
     def _append_to_data_file(self, record_data: dict) -> int:
         record_json = json.dumps(record_data)
-        with open(self.data_file, "a", encoding="utf-8") as f:
+        with open(self.data_file_path, "a", encoding="utf-8") as f:
             pos = f.tell()
             f.write(record_json + "\n")
         return pos
 
     def _read_from_data_file(self, position: int) -> dict | None:
         try:
-            with open(self.data_file, "r", encoding="utf-8") as f:
+            with open(self.data_file_path, "r", encoding="utf-8") as f:
                 f.seek(position)
                 line = f.readline()
                 if line:
                     return json.loads(line.strip())
-        except FileNotFoundError:
-            print(f"Error: el archivo de datos '{self.data_file}' no fue encontrado")
-        except json.JSONDecodeError:
-            print(f"Error: no se pudo decodificar JSON en la posicion {position} del archivo '{self.data_file}'")
         except Exception as e:
-            print(f"Un error inesperado ocurrio al leer el archivo de datos: {e}")
+            print(f"Error leyendo archivo de datos en {position}: {e}")
         return None
 
-    def _find_leaf(self, key) -> BPlusTreeLeaf:
-        node = self.root
-        while not node.is_leaf():
-            idx = bisect_right(node.keys, key)
-            node = node.children[idx]
-        return node
+    def _find_leaf_pos(self, key):
+
+        with self.node_manager as nm:
+            root_pos = nm.read_header()
+            if root_pos == -1:
+                return -1
+
+            current_node_pos = root_pos
+            while True:
+                node = nm.read_node(current_node_pos)
+                if node.is_leaf:
+                    return current_node_pos
+
+                idx = bisect_right(node.keys, key)
+                current_node_pos = node.pointers[idx]
+                if current_node_pos == -1:
+                    raise Exception("Puntero a hijo vacio encontrado en nodo interno.")
 
     def search(self, key) -> dict | None:
-        if self.root is None or (self.root.is_leaf() and not self.root.keys):
+        leaf_pos = self._find_leaf_pos(key)
+        if leaf_pos == -1:
             return None
-        leaf = self._find_leaf(key)
-        idx = bisect_left(leaf.keys, key)
-        if idx < len(leaf.keys) and leaf.keys[idx] == key:
-            return self._read_from_data_file(leaf.positions[idx])
+
+        with self.node_manager as nm:
+            leaf = nm.read_node(leaf_pos)
+
+            idx = bisect_left(leaf.keys, key)
+            if idx < len(leaf.keys) and leaf.keys[idx] == key:
+                return self._read_from_data_file(leaf.pointers[idx])
         return None
 
     def insert(self, key, record_data: dict):
         if not isinstance(record_data, dict):
             raise ValueError("record_data debe ser un dict")
 
-        if self.root is None:
-             self.root = BPlusTreeLeaf()
+        data_position = self._append_to_data_file(record_data)
 
-        leaf = self._find_leaf(key)
-        idx = bisect_left(leaf.keys, key)
-        if idx < len(leaf.keys) and leaf.keys[idx] == key:
-            print(f"Warning: la clave '{key}' ya existe en el B+ Tree, no se insertara")
-            return
+        with self.node_manager as nm:
+            root_pos = nm.read_header()
+            if root_pos == -1:
+                root_leaf = BPlusTreeLeaf(self.order)
+                root_leaf.insert(key, data_position)
+                new_root_pos = nm.write_node(root_leaf)
+                nm.write_header(new_root_pos)
+                return
 
-        position = self._append_to_data_file(record_data)
-        leaf.insert(key, position)
+            leaf_pos = self._find_leaf_pos(key)
+            leaf = nm.read_node(leaf_pos)
 
-        if leaf.is_full(self.order):
-            self._split_node(leaf)
-        self._save_index()
+            idx_check = bisect_left(leaf.keys, key)
+            if idx_check < len(leaf.keys) and leaf.keys[idx_check] == key:
+                print(f"Warning: La clave '{key}' ya existe. No se insertara.")
+                return
 
-    def _split_node(self, node):
-        mid_idx = self.order // 2
+            leaf.insert(key, data_position)
+            if not leaf.is_full():
+                nm.write_node(leaf)
+                return
 
-        if node.is_leaf():
-            new_sibling_leaf = BPlusTreeLeaf(parent=node.parent)
+            nm.write_node(leaf)
+            self._split_node(leaf_pos, nm)
+
+    def _split_node(self, node_to_split_pos, nm):
+        node = nm.read_node(node_to_split_pos)
+        mid_idx = (self.order -1) // 2
+        if node.is_leaf:
+            new_sibling_leaf = BPlusTreeLeaf(self.order, parent_pos=node.parent_pos)
             new_sibling_leaf.keys = node.keys[mid_idx:]
-            new_sibling_leaf.positions = node.positions[mid_idx:]
+            new_sibling_leaf.pointers = node.pointers[mid_idx:]
 
             node.keys = node.keys[:mid_idx]
-            node.positions = node.positions[:mid_idx]
+            node.pointers = node.pointers[:mid_idx]
 
-            new_sibling_leaf.next_leaf = node.next_leaf
-            if node.next_leaf:
-                node.next_leaf.prev_leaf = new_sibling_leaf
-            node.next_leaf = new_sibling_leaf
-            new_sibling_leaf.prev_leaf = node
+            new_sibling_pos = nm.write_node(new_sibling_leaf)
+            new_sibling_leaf.pos = new_sibling_pos
+            new_sibling_leaf.next_leaf_pos = node.next_leaf_pos
+            new_sibling_leaf.prev_leaf_pos = node.pos
 
+            if node.next_leaf_pos != -1:
+                original_next_node = nm.read_node(node.next_leaf_pos)
+                original_next_node.prev_leaf_pos = new_sibling_pos
+                nm.write_node(original_next_node)
+
+            node.next_leaf_pos = new_sibling_pos
+            nm.write_node(node)
+            nm.write_node(new_sibling_leaf)
             promoted_key = new_sibling_leaf.keys[0]
-            self._insert_in_parent(node, promoted_key, new_sibling_leaf)
+            self._insert_in_parent(node.pos, promoted_key, new_sibling_pos, nm)
         else:
             promoted_key = node.keys[mid_idx]
-
-            new_sibling_internal = BPlusTreeInternal(parent=node.parent)
+            new_sibling_internal = BPlusTreeInternal(self.order, parent_pos=node.parent_pos)
             new_sibling_internal.keys = node.keys[mid_idx + 1:]
-            new_sibling_internal.children = node.children[mid_idx + 1:]
-            for child in new_sibling_internal.children:
-                child.parent = new_sibling_internal
+            new_sibling_internal.pointers = node.pointers[mid_idx + 1:]
 
             node.keys = node.keys[:mid_idx]
-            node.children = node.children[:mid_idx + 1]
+            node.pointers = node.pointers[:mid_idx + 1]
 
-            self._insert_in_parent(node, promoted_key, new_sibling_internal)
+            new_sibling_pos = nm.write_node(new_sibling_internal)
+            new_sibling_internal.pos = new_sibling_pos
+            for child_pos in new_sibling_internal.pointers:
+                if child_pos != -1:
+                    child_node = nm.read_node(child_pos)
+                    child_node.parent_pos = new_sibling_pos
+                    nm.write_node(child_node)
 
-    def _insert_in_parent(self, left_child, key_to_insert, right_child):
-        parent = left_child.parent
-        if parent is None:
-            new_root = BPlusTreeInternal()
+            nm.write_node(node)
+            nm.write_node(new_sibling_internal)
+
+            self._insert_in_parent(node.pos, promoted_key, new_sibling_pos, nm)
+
+    def _insert_in_parent(self, left_child_pos, key_to_insert, right_child_pos, nm):
+        left_child_node = nm.read_node(left_child_pos)
+        parent_pos = left_child_node.parent_pos
+        if parent_pos == -1:
+            new_root = BPlusTreeInternal(self.order)
             new_root.keys = [key_to_insert]
-            new_root.children = [left_child, right_child]
-            left_child.parent = new_root
-            right_child.parent = new_root
-            self.root = new_root
+            new_root.pointers = [left_child_pos, right_child_pos]
+
+            new_root_pos = nm.write_node(new_root)
+            nm.write_header(new_root_pos)
+
+            left_child_node.parent_pos = new_root_pos
+            nm.write_node(left_child_node)
+            right_child_node = nm.read_node(right_child_pos)
+            right_child_node.parent_pos = new_root_pos
+            nm.write_node(right_child_node)
             return
 
-        idx = bisect_left(parent.keys, key_to_insert)
-        parent.keys.insert(idx, key_to_insert)
-        parent.children.insert(idx + 1, right_child)
+        parent_node = nm.read_node(parent_pos)
+        idx_insert = bisect_left(parent_node.keys, key_to_insert)
+        parent_node.keys.insert(idx_insert, key_to_insert)
+        parent_node.pointers.insert(idx_insert + 1, right_child_pos)
+        if not parent_node.is_full():
+            nm.write_node(parent_node)
+            return
 
-        if parent.is_full(self.order):
-            self._split_node(parent)
+        nm.write_node(parent_node)
+        self._split_node(parent_pos, nm)
 
-    def update(self, key, new_record_data: dict) -> bool:
-        if not isinstance(new_record_data, dict):
-            print("Error: new_record_data debe ser un dict")
-            return False
-        if self.root is None or (self.root.is_leaf() and not self.root.keys):
-            print(f"Error: la clave '{key}' no existe (arbol vacio), no se puede actualizar")
-            return False
+    def delete(self, key):
+        with self.node_manager as nm:
+            leaf_pos = self._find_leaf_pos(key)
+            if leaf_pos == -1:
+                print(f"Warning: Clave '{key}' no encontrada para eliminar.")
+                return False
 
-        leaf = self._find_leaf(key)
-        idx = bisect_left(leaf.keys, key)
+            leaf = nm.read_node(leaf_pos)
+            if not leaf.delete_key_and_pointer(key):
+                print(f"Warning: Clave '{key}' no encontrada en la hoja {leaf_pos}.")
+                return False
 
-        if idx < len(leaf.keys) and leaf.keys[idx] == key:
-            old_position = leaf.positions[idx]
-            new_position = self._append_to_data_file(new_record_data)
-            leaf.positions[idx] = new_position
-            self._save_index()
-            return True
-        else:
-            print(f"Error: la clave '{key}' no existe en el B+ Tree, no se puede actualizar")
-            return False
+            if leaf.is_root() and len(leaf.keys) == 0:
+                nm.write_header(-1)
+                return True
 
-    def delete(self, key_to_delete):
-        if self.root is None or (self.root.is_leaf() and not self.root.keys):
-            print(f"Warning: clave '{key_to_delete}' no encontrada (arbol vacio)")
-            return False
+            nm.write_node(leaf)
+            if leaf.is_underflow() and not leaf.is_root():
+                self._handle_underflow(leaf.pos, nm)
 
-        leaf_node = self._find_leaf(key_to_delete)
-        if not leaf_node.delete_key(key_to_delete):
-            print(f"Warning: clave '{key_to_delete}' no encontrada en la hoja para eliminar")
-            return False
-
-        self._handle_underflow(leaf_node)
-        self._save_index()
         return True
 
-    def _handle_underflow(self, node):
-        if node == self.root:
-            if not node.is_leaf() and len(node.children) == 1:
-                self.root = node.children[0]
-                self.root.parent = None
+    def _handle_underflow(self, node_pos, nm):
+        node = nm.read_node(node_pos)
+        if node.is_root():
+            if not node.is_leaf and len(node.keys) == 0 and node.pointers:
+                new_root_pos = node.pointers[0]
+                if new_root_pos != -1:
+                    new_root_node = nm.read_node(new_root_pos)
+                    new_root_node.parent_pos = -1
+                    nm.write_node(new_root_node)
+                nm.write_header(new_root_pos)
             return
 
-        if not node.is_underflow(self.order, is_root=False):
+        if not node.is_underflow():
             return
 
-        parent = node.parent
-        child_idx = parent.children.index(node)
+        parent_node = nm.read_node(node.parent_pos)
+        try:
+            child_idx_in_parent = parent_node.pointers.index(node_pos)
+        except ValueError:
+            raise Exception(f"Error critico: Nodo {node_pos} no encontrado como hijo de {node.parent_pos}")
 
-        if child_idx > 0:
-            left_sibling = parent.children[child_idx - 1]
-            if len(left_sibling.keys) > (self.order // 2):
-                self._borrow_from_left_sibling(node, left_sibling, parent, child_idx)
+        min_keys_required = (self.order - 1) // 2
+        if child_idx_in_parent > 0:
+            left_sibling_pos = parent_node.pointers[child_idx_in_parent - 1]
+            left_sibling_node = nm.read_node(left_sibling_pos)
+            if len(left_sibling_node.keys) > min_keys_required:
+                self._borrow_from_left(node, left_sibling_node, parent_node, child_idx_in_parent, nm)
                 return
 
-        if child_idx < len(parent.children) - 1:
-            right_sibling = parent.children[child_idx + 1]
-            if len(right_sibling.keys) > (self.order // 2):
-                self._borrow_from_right_sibling(node, right_sibling, parent, child_idx)
+        if child_idx_in_parent < len(parent_node.pointers) - 1:
+            right_sibling_pos = parent_node.pointers[child_idx_in_parent + 1]
+            right_sibling_node = nm.read_node(right_sibling_pos)
+            if len(right_sibling_node.keys) > min_keys_required:
+                self._borrow_from_right(node, right_sibling_node, parent_node, child_idx_in_parent, nm)
                 return
 
-        if child_idx > 0:
-            left_sibling = parent.children[child_idx - 1]
-            self._merge_with_sibling(left_sibling, node, parent, child_idx - 1)
+        if child_idx_in_parent > 0:
+            left_sibling_to_merge_pos = parent_node.pointers[child_idx_in_parent - 1]
+            left_sibling_to_merge_node = nm.read_node(left_sibling_to_merge_pos)
+            self._merge_nodes(left_sibling_to_merge_node, node, parent_node, child_idx_in_parent - 1, nm)
         else:
-            right_sibling = parent.children[child_idx + 1]
-            self._merge_with_sibling(node, right_sibling, parent, child_idx)
+            right_sibling_to_merge_pos = parent_node.pointers[child_idx_in_parent + 1]
+            right_sibling_to_merge_node = nm.read_node(right_sibling_to_merge_pos)
+            self._merge_nodes(node, right_sibling_to_merge_node, parent_node, child_idx_in_parent, nm)
 
-    def _borrow_from_left_sibling(self, node, left_sibling, parent, node_idx_in_parent_children):
-        parent_key_idx = node_idx_in_parent_children - 1
-
-        if node.is_leaf():
+    def _borrow_from_left(self, node_in_underflow, left_sibling, parent, child_idx_of_node_in_underflow, nm):
+        parent_key_separator_idx = child_idx_of_node_in_underflow - 1
+        if node_in_underflow.is_leaf:
             borrowed_key = left_sibling.keys.pop(-1)
-            borrowed_pos = left_sibling.positions.pop(-1)
-            node.keys.insert(0, borrowed_key)
-            node.positions.insert(0, borrowed_pos)
-            parent.keys[parent_key_idx] = node.keys[0]
+            borrowed_data_ptr = left_sibling.pointers.pop(-1)
+            node_in_underflow.keys.insert(0, borrowed_key)
+            node_in_underflow.pointers.insert(0, borrowed_data_ptr)
+            parent.keys[parent_key_separator_idx] = node_in_underflow.keys[0]
         else:
-            node.keys.insert(0, parent.keys[parent_key_idx])
-            parent.keys[parent_key_idx] = left_sibling.keys.pop(-1)
-            borrowed_child = left_sibling.children.pop(-1)
-            borrowed_child.parent = node
-            node.children.insert(0, borrowed_child)
+            key_from_parent = parent.keys[parent_key_separator_idx]
+            node_in_underflow.keys.insert(0, key_from_parent)
+            parent.keys[parent_key_separator_idx] = left_sibling.keys.pop(-1)
+            borrowed_child_ptr = left_sibling.pointers.pop(-1)
+            node_in_underflow.pointers.insert(0, borrowed_child_ptr)
+            if borrowed_child_ptr != -1:
+                moved_child_node = nm.read_node(borrowed_child_ptr)
+                moved_child_node.parent_pos = node_in_underflow.pos
+                nm.write_node(moved_child_node)
 
-    def _borrow_from_right_sibling(self, node, right_sibling, parent, node_idx_in_parent_children):
-        parent_key_idx = node_idx_in_parent_children
+        nm.write_node(node_in_underflow)
+        nm.write_node(left_sibling)
+        nm.write_node(parent)
 
-        if node.is_leaf():
+    def _borrow_from_right(self, node_in_underflow, right_sibling, parent, child_idx_of_node_in_underflow, nm):
+        parent_key_separator_idx = child_idx_of_node_in_underflow
+        if node_in_underflow.is_leaf:
             borrowed_key = right_sibling.keys.pop(0)
-            borrowed_pos = right_sibling.positions.pop(0)
-            node.keys.append(borrowed_key)
-            node.positions.append(borrowed_pos)
-            parent.keys[parent_key_idx] = right_sibling.keys[0]
+            borrowed_data_ptr = right_sibling.pointers.pop(0)
+            node_in_underflow.keys.append(borrowed_key)
+            node_in_underflow.pointers.append(borrowed_data_ptr)
+            parent.keys[parent_key_separator_idx] = right_sibling.keys[0]
         else:
-            node.keys.append(parent.keys[parent_key_idx])
-            parent.keys[parent_key_idx] = right_sibling.keys.pop(0)
-            borrowed_child = right_sibling.children.pop(0)
-            borrowed_child.parent = node
-            node.children.append(borrowed_child)
+            key_from_parent = parent.keys[parent_key_separator_idx]
+            node_in_underflow.keys.append(key_from_parent)
+            parent.keys[parent_key_separator_idx] = right_sibling.keys.pop(0)
+            borrowed_child_ptr = right_sibling.pointers.pop(0)
+            node_in_underflow.pointers.append(borrowed_child_ptr)
+            if borrowed_child_ptr != -1:
+                moved_child_node = nm.read_node(borrowed_child_ptr)
+                moved_child_node.parent_pos = node_in_underflow.pos
+                nm.write_node(moved_child_node)
 
-    def _merge_with_sibling(self, left_node_of_merge, right_node_of_merge, parent, parent_key_idx_between_nodes):
-        if left_node_of_merge.is_leaf():
-            left_node_of_merge.keys.extend(right_node_of_merge.keys)
-            left_node_of_merge.positions.extend(right_node_of_merge.positions)
-            left_node_of_merge.next_leaf = right_node_of_merge.next_leaf
-            if right_node_of_merge.next_leaf:
-                right_node_of_merge.next_leaf.prev_leaf = left_node_of_merge
-        else:
-            left_node_of_merge.keys.append(parent.keys[parent_key_idx_between_nodes])
-            left_node_of_merge.keys.extend(right_node_of_merge.keys)
-            left_node_of_merge.children.extend(right_node_of_merge.children)
-            for child in right_node_of_merge.children:
-                child.parent = left_node_of_merge
+        nm.write_node(node_in_underflow)
+        nm.write_node(right_sibling)
+        nm.write_node(parent)
 
-        del parent.keys[parent_key_idx_between_nodes]
-        del parent.children[parent_key_idx_between_nodes + 1]
+    def _merge_nodes(self, left_node_of_merge, right_node_to_be_merged, parent_node, parent_key_separator_idx, nm):
+        if not left_node_of_merge.is_leaf:
+            key_from_parent = parent_node.keys.pop(parent_key_separator_idx)
+            left_node_of_merge.keys.append(key_from_parent)
+
+        left_node_of_merge.keys.extend(right_node_to_be_merged.keys)
+        left_node_of_merge.pointers.extend(right_node_to_be_merged.pointers)
+
+        if left_node_of_merge.is_leaf:
+            left_node_of_merge.next_leaf_pos = right_node_to_be_merged.next_leaf_pos
+            if right_node_to_be_merged.next_leaf_pos != -1:
+                node_after_merged_right = nm.read_node(right_node_to_be_merged.next_leaf_pos)
+                node_after_merged_right.prev_leaf_pos = left_node_of_merge.pos
+                nm.write_node(node_after_merged_right)
+
+        if not left_node_of_merge.is_leaf:
+            num_pointers_from_right = len(right_node_to_be_merged.pointers)
+            start_idx_of_moved_pointers = len(left_node_of_merge.pointers) - num_pointers_from_right
+            for i in range(start_idx_of_moved_pointers, len(left_node_of_merge.pointers)):
+                child_pos = left_node_of_merge.pointers[i]
+                if child_pos != -1:
+                    child_node = nm.read_node(child_pos)
+                    child_node.parent_pos = left_node_of_merge.pos
+                    nm.write_node(child_node)
+
+        del parent_node.pointers[parent_key_separator_idx + 1]
+
+        nm.write_node(left_node_of_merge)
+        nm.write_node(parent_node)
+
+        if parent_node.is_underflow():
+            self._handle_underflow(parent_node.pos, nm)
 
     def range_search(self, start_key, end_key) -> list[dict]:
         results = []
-        if self.root is None or (self.root.is_leaf() and not self.root.keys):
+        current_leaf_pos = self._find_leaf_pos(start_key)
+        if current_leaf_pos == -1:
             return results
 
-        leaf = self._find_leaf(start_key)
-        while leaf:
-            for i, key_in_leaf in enumerate(leaf.keys):
-                if key_in_leaf > end_key:
-                    return results
-                if key_in_leaf >= start_key:
-                    record = self._read_from_data_file(leaf.positions[i])
-                    if record:
-                        results.append(record)
-            leaf = leaf.next_leaf
+        with self.node_manager as nm:
+            while current_leaf_pos != -1:
+                leaf = nm.read_node(current_leaf_pos)
+                for i, key_in_leaf in enumerate(leaf.keys):
+                    if key_in_leaf > end_key:
+                        return results
+                    if key_in_leaf >= start_key:
+                        record = self._read_from_data_file(leaf.pointers[i])
+                        if record:
+                            results.append(record)
+                current_leaf_pos = leaf.next_leaf_pos
         return results
 
-    def compact_data_file(self):
-        print(f"Iniciando compactacion para '{self.data_file}' y su indice B+ Tree '{self.index_file}'...")
-        if self.root is None or (self.root.is_leaf() and not self.root.keys):
-            print("El arbol B+ esta vacio o la raiz es una hoja vacía.")
-            if os.path.exists(self.data_file) and os.path.getsize(self.data_file) > 0:
-                try:
-                    open(self.data_file, 'w').close()
-                    print(f"Archivo de datos '{self.data_file}' truncado.")
-                except Exception as e:
-                    print(f"Error al truncar '{self.data_file}': {e}")
-            self._save_index()
-            return
-
-        temp_data_file = self.data_file + ".tmp"
-        try:
-            with open(temp_data_file, "w", encoding="utf-8") as tmp_f:
-                current_leaf = self.root
-                while not current_leaf.is_leaf():
-                    if not current_leaf.children:
-                        print("Error: nodo interno sin hijos encontrado durante la busqueda de la primera hoja para compactar")
-                        self._save_index()
-                        return
-                    current_leaf = current_leaf.children[0]
-
-                if not current_leaf.is_leaf():
-                    print("Error: no se pudo encontrar la primera hoja para la compactacion.")
-                    self._save_index()
+    def print_tree(self, node_pos=None, level=0):
+        with self.node_manager as nm:
+            if node_pos is None and level == 0:
+                node_pos = nm.read_header()
+                if node_pos == -1:
+                    print("Arbol vacio.")
                     return
+                print("--- Estructura del Arbol B+ ---")
 
-                while current_leaf:
-                    for i in range(len(current_leaf.keys)):
-                        key = current_leaf.keys[i]
-                        old_pos = current_leaf.positions[i]
-                        record = self._read_from_data_file(old_pos)
-                        if record:
-                            new_pos = tmp_f.tell()
-                            tmp_f.write(json.dumps(record) + "\n")
-                            current_leaf.positions[i] = new_pos
-                        else:
-                            print(f"Warning: No se pudo leer el registro para la clave '{key}' en pos {old_pos} durante la compactacion")
-                    current_leaf = current_leaf.next_leaf
-
-            shutil.move(temp_data_file, self.data_file)
-            print(f"Archivo de datos '{self.data_file}' compactado exitosamente.")
-            self._save_index()
-            print(f"Indice B+ Tree '{self.index_file}' actualizado con nuevas posiciones.")
-
-        except Exception as e:
-            print(f"Error durante la compactacion del B+ Tree: {e}")
-            if os.path.exists(temp_data_file):
-                try:
-                    os.remove(temp_data_file)
-                except OSError as e_rm:
-                    print(f"Error eliminando archivo temporal '{temp_data_file}': {e_rm}")
-        finally:
-            if os.path.exists(temp_data_file):
-                try:
-                    os.remove(temp_data_file)
-                except OSError as e_rm_fin:
-                    print(f"Error eliminando archivo temporal '{temp_data_file}' en finally: {e_rm_fin}")
-
-    def print_tree(self, node=None, level=0, prefix="Root:"):
-        if node is None:
-            node = self.root
-            if node is None:
-                print(f"{prefix} (Arbol No Inicializado/Vacio)")
-                return
-            if node.is_leaf() and not node.keys:
-                print(f"{prefix} (Arbol Vacio - Hoja Raiz Unica)")
+            if node_pos == -1:
                 return
 
-        indent = " " * (level * 4)
-        parent_info = f"(Parent Keys: {node.parent.keys if node.parent else 'None'})" if level > 0 else ""
+            node = nm.read_node(node_pos)
+            indent = "  " * level
+            type_str = "Hoja" if node.is_leaf else "Interno"
+            parent_str = f"(Padre:{node.parent_pos})" if node.parent_pos != -1 else "(Raiz)"
 
-        if node.is_leaf():
-            print(f"{indent}{prefix} Leaf Keys: {node.keys} {parent_info} Prev: {node.prev_leaf.keys[0] if node.prev_leaf and node.prev_leaf.keys else 'None'}, Next: {node.next_leaf.keys[0] if node.next_leaf and node.next_leaf.keys else 'None'}")
+            leaf_links_str = ""
+            if node.is_leaf:
+                leaf_links_str = f"(Prev:{node.prev_leaf_pos}, Next:{node.next_leaf_pos})"
+
+            print(f"{indent}[L{level} {type_str} @{node.pos} {parent_str} {leaf_links_str}] Claves: {node.keys}")
+            if node.is_leaf:
+                print(f"{indent}  Punteros Datos: {node.pointers}")
+            else:
+                print(f"{indent}  Punteros Hijos: {node.pointers}")
+
+            if not node.is_leaf:
+                for child_pos in node.pointers:
+                    if child_pos != -1:
+                        self.print_tree_recursive_helper(child_pos, level + 1, nm)
+
+    def print_tree_recursive_helper(self, node_pos, level, nm):
+        if node_pos == -1:
+            return
+        node = nm.read_node(node_pos)
+        indent = "  " * level
+        type_str = "Hoja" if node.is_leaf else "Interno"
+        parent_str = f"(Padre:{node.parent_pos})" if node.parent_pos != -1 else "(Raiz)"
+
+        leaf_links_str = ""
+        if node.is_leaf:
+            leaf_links_str = f"(Prev:{node.prev_leaf_pos}, Next:{node.next_leaf_pos})"
+
+        print(f"{indent}[L{level} {type_str} @{node.pos} {parent_str} {leaf_links_str}] Claves: {node.keys}")
+        if node.is_leaf:
+            print(f"{indent}  Punteros Datos: {node.pointers}")
         else:
-            print(f"{indent}{prefix} Internal Keys: {node.keys} {parent_info}")
-            for i, child in enumerate(node.children):
-                child_prefix = "->"
-                self.print_tree(child, level + 1, f"Child {i} {child_prefix}")
+            print(f"{indent}  Punteros Hijos: {node.pointers}")
+
+        if not node.is_leaf:
+            for child_pos in node.pointers:
+                if child_pos != -1:
+                    self.print_tree_recursive_helper(child_pos, level + 1, nm)
