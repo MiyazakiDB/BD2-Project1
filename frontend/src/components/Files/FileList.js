@@ -110,7 +110,7 @@ const FileList = () => {
           </div>
         )}
 
-        {/* Loading State */}
+        {/* Loading State chuta */}
         {loading ? (
           <div className="files-loading-container">
             <div className="files-loading-spinner"></div>
