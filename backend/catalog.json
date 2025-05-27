@@ -29,43 +29,68 @@
       "data_file": "C:\\Users\\tokio\\OneDrive\\Escritorio\\BD2-Project1\\backend\\data\\12\\12_kl.dat",
       "indices": {}
     },
-    "10_tabla": {
-      "name": "tabla",
+    "10_clientes": {
+      "name": "clientes",
       "user_id": 10,
-      "file_path": "backend/uploads\\ejemplo2.txt",
+      "file_path": "backend/uploads\\empleados.csv",
       "columns": [
         {
           "name": "id",
           "data_type": "INT",
           "size": null,
-          "index_type": "HASH"
+          "index_type": null
         },
         {
           "name": "nombre",
           "data_type": "VARCHAR",
           "size": 255,
-          "index_type": "HASH"
+          "index_type": null
         },
         {
-          "name": "edad",
+          "name": "dni",
+          "data_type": "INT",
+          "size": null,
+          "index_type": "HASH"
+        }
+      ],
+      "row_count": 5,
+      "created_at": "2025-05-26T23:06:03.129649",
+      "data_file": "C:\\Users\\tokio\\OneDrive\\Escritorio\\BD2-Project1\\backend\\data\\10\\10_clientes.dat",
+      "indices": {
+        "dni": {
+          "type": "HASH",
+          "path": "./index\\10_clientes_dni_hash.idx"
+        }
+      }
+    },
+    "10_client": {
+      "name": "client",
+      "user_id": 10,
+      "file_path": "backend/uploads\\empleados.csv",
+      "columns": [
+        {
+          "name": "id",
+          "data_type": "INT",
+          "size": null,
+          "index_type": null
+        },
+        {
+          "name": "nombre",
+          "data_type": "VARCHAR",
+          "size": 255,
+          "index_type": null
+        },
+        {
+          "name": "dni",
           "data_type": "INT",
           "size": null,
           "index_type": null
         }
       ],
-      "row_count": 3,
-      "created_at": "2025-05-26T22:41:58.971621",
-      "data_file": "C:\\Users\\tokio\\OneDrive\\Escritorio\\BD2-Project1\\backend\\data\\10\\10_tabla.dat",
-      "indices": {
-        "id": {
-          "type": "HASH",
-          "path": "./index\\10_tabla_id_hash.idx"
-        },
-        "nombre": {
-          "type": "HASH",
-          "path": "./index\\10_tabla_nombre_hash.idx"
-        }
-      }
+      "row_count": 5,
+      "created_at": "2025-05-26T23:20:06.117532",
+      "data_file": "C:\\Users\\tokio\\OneDrive\\Escritorio\\BD2-Project1\\backend\\data\\10\\10_client.dat",
+      "indices": {}
     }
   },
   "users": {}

@@ -400,38 +400,48 @@ class QueryPlanner:
         table_metadata: Dict[str, Any], user_id: int
     ) -> List[List[Any]]:
         columns = [col["name"] for col in table_metadata["columns"]]
-        # Solo soporta un índice por ahora (el primero que pueda usar índice)
+        filtered_data = []
+
+        # Intenta usar índices si están disponibles
         for cond in conditions:
             col = cond["column"]
             op = cond["operator"]
             if col in table_metadata.get("indices", {}) and op in ("=", "BETWEEN"):
-                # Usar índice
-                index_info = table_metadata["indices"][col]
-                index_type = index_info["type"]
-                index_name = index_info["name"]
-                index = self.index_interface.get_index(index_name)
-                if not index:
-                    # Cargar el índice si no está en memoria
-                    index_file = index_info["file"]
-                    index = self.index_interface.load_index(index_type, index_name, index_file)
-                # Buscar filas usando el índice
-                if op == "=":
-                    row_indices = index.search(cond["value"])
-                    if not isinstance(row_indices, list):
-                        row_indices = [row_indices] if row_indices is not None else []
-                elif op == "BETWEEN":
-                    start, end = cond["value"]
-                    row_indices = index.range_search(start, end)
-                else:
-                    row_indices = []
-                # Filtrar data por índices encontrados
-                filtered_data = [data[i] for i in row_indices if i is not None and i < len(data)]
-                return filtered_data
-        # Si no hay índice aplicable, usar el método normal
-        filtered_data = []
+                try:
+                    # Usar índice
+                    index_info = table_metadata["indices"][col]
+                    index_type = index_info["type"]
+                    index_name = f"{table_metadata['user_id']}_{table_metadata['name']}_{col}_{index_info['type'].lower()}"
+                    index = self.index_interface.get_index(index_name)
+                    if not index:
+                        # Cargar el índice si no está en memoria
+                        index_file = index_info["path"]
+                        index = self.index_interface.load_index(index_type, index_name, index_file)
+                
+                    # Buscar filas usando el índice
+                    if op == "=":
+                        row_indices = index.search(cond["value"])
+                        if not isinstance(row_indices, list):
+                            row_indices = [row_indices] if row_indices is not None else []
+                    elif op == "BETWEEN":
+                        start, end = cond["value"]
+                        row_indices = index.range_search(start, end)
+                    else:
+                        row_indices = []
+
+                    # Filtrar data por índices encontrados
+                    filtered_data = [data[i] for i in row_indices if i is not None and i < len(data)]
+                    return filtered_data  # Retorna los datos filtrados por el índice
+                except Exception as e:
+                    # Si falla el índice, imprime un log y continúa con evaluación normal
+                    print(f"Warning: Could not use index for column {col}. Error: {str(e)}")
+                    break  # Salir del bucle y usar evaluación normal
+
+        # Si no hay índice aplicable o falló, usar el método normal
         for row in data:
             if await self._evaluate_conditions(row, conditions, columns, table_metadata, user_id):
                 filtered_data.append(row)
+
         return filtered_data
     
 
