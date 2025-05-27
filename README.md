@@ -141,5 +141,3 @@ Este script envía (push) los cambios de todos los repositorios a sus respectivo
 - Enlace público del repositorio en Canvas
 
 ---
-
-🛎 **Importante**: Hacer commits frecuentes con mensajes claros, participar en issues/pull requests (la rubrica dice que lo tomaran en cuenta).
