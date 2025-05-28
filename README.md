@@ -1,9 +1,6 @@
 # BD2-Project1
 
 ![Proyecto de Base de Datos](https://img.shields.io/badge/Base_de_Datos-Proyecto-blue)
-![Python](https://img.shields.io/badge/Python-64.2%25-green)
-![JavaScript](https://img.shields.io/badge/JavaScript-21.3%25-yellow)
-![CSS](https://img.shields.io/badge/CSS-12.3%25-purple)
 
 Un proyecto integral de base de datos desarrollado por el grupo 5. Este proyecto implementa conceptos y técnicas avanzadas de bases de datos utilizando Python como lenguaje principal de backend con un frontend en JavaScript/CSS y React.
 
