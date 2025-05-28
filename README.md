@@ -17,7 +17,7 @@ MiyazakiDB es un sistema de gestión de bases de datos que proporciona capacidad
 - Sistema de autenticación seguro
 
 ## 📊 Métricas de Pruebas
-![Image](https://github.com/user-attachments/assets/dc33596d-fd94-4380-9af1-14fcd34efb93)
+![Image](https://github.com/user-attachments/assets/5740c8bc-74a6-446e-8164-dd79cc78374f)
 ...
 
 ## 🚀 Primeros Pasos
