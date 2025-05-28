@@ -18,7 +18,6 @@ MiyazakiDB es un sistema de gestión de bases de datos que proporciona capacidad
 - Interfaz web interactiva
 - Componentes de visualización de datos
 - Sistema de autenticación seguro
-- Herramientas completas de análisis de datos
 
 ## 📊 Métricas de Pruebas
 
