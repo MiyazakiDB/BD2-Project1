@@ -3,7 +3,9 @@ import './Auth.css';
 import WaveSketch from './WaveSketch';
 import logo from '../../assets/logo.svg';
 import { Link, useNavigate } from 'react-router-dom';
-import { authService } from '../../services/api';
+
+// API Base URL - igual que en app.js
+const API_BASE_URL = 'http://localhost:8000';
 
 const Login = ({ onLogin }) => {
   const [credentials, setCredentials] = useState({ username: '', password: '' });
@@ -20,49 +22,45 @@ const Login = ({ onLogin }) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    
     try {
-      const response = await authService.login(credentials);
-      let token = null;
-      if (response.data) {
-        token = response.data.access_token || response.data.token;
+      // Lógica exacta de app.js para login
+      const formData = new FormData();
+      formData.append('username', credentials.username); // API expects username field
+      formData.append('password', credentials.password);
+      
+      const response = await fetch(`${API_BASE_URL}/token`, {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        throw new Error('Login failed');
       }
-      if (!token) {
-        throw new Error('No se recibió un token válido del servidor');
+      
+      const data = await response.json();
+      const authToken = data.access_token;
+      
+      // Guardar token como en app.js
+      localStorage.setItem('authToken', authToken);
+      
+      // Añade log para depuración
+      console.log('Login exitoso, token guardado:', authToken);
+      
+      if (typeof onLogin === 'function') {
+        onLogin();
+      } else {
+        console.error("Error: onLogin no es una función");
       }
-      localStorage.setItem('token', token);
-      onLogin();
-      navigate('/files');
-    } catch (err) {
-      let errorMessage = 'Error iniciando sesión. Verifica tus credenciales.';
-      if (err.response?.data) {
-        const errorData = err.response.data;
-        if (Array.isArray(errorData) && errorData.length > 0) {
-          errorMessage = errorData.map(error => {
-            if (typeof error === 'string') return error;
-            return error.msg || error.message || 'Error de validación';
-          }).join(', ');
-        } else if (errorData.detail) {
-          if (typeof errorData.detail === 'string') {
-            errorMessage = errorData.detail;
-          } else if (Array.isArray(errorData.detail)) {
-            errorMessage = errorData.detail.map(error => {
-              if (typeof error === 'string') return error;
-              return error.msg || error.message || 'Error de validación';
-            }).join(', ');
-          } else {
-            errorMessage = 'Error de validación del servidor';
-          }
-        } else if (errorData.message && typeof errorData.message === 'string') {
-          errorMessage = errorData.message;
-        } else if (typeof errorData === 'string') {
-          errorMessage = errorData;
-        } else {
-          errorMessage = 'Error del servidor';
-        }
-      } else if (err.message && typeof err.message === 'string') {
-        errorMessage = err.message;
-      }
-      setError(errorMessage);
+      
+      // Retrasa un poco la navegación para asegurar que el estado se actualice
+      setTimeout(() => {
+        navigate('/files');
+      }, 100);
+      
+    } catch (error) {
+      console.error('Login error:', error);
+      setError('Login failed: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -103,7 +101,7 @@ const Login = ({ onLogin }) => {
           )}
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-group">
-              <label htmlFor="username" className="form-label">Username</label>
+              <label htmlFor="username" className="form-label">Email</label>
               <input
                 type="text"
                 id="username"
