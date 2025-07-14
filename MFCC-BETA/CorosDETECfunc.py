@@ -274,7 +274,7 @@ def detectar_y_extraer_coro(ruta_audio, salida_audio, duracion_objetivo=30, most
         exportar_coro_refinado(ruta_audio, inicio_final, fin_final, salida_audio)
         
         if mostrar_info:
-            print("Análisis completado exitosamente!")
+            print("Analisis completado exitosamente!")
         
         # Retornar información del resultado
         return {
@@ -298,8 +298,8 @@ def detectar_y_extraer_coro(ruta_audio, salida_audio, duracion_objetivo=30, most
 # === EJEMPLO DE USO ===
 if __name__ == "__main__":
     # Uso simple
-    ruta_entrada = "C:/Users/tokio/OneDrive/Escritorio/Pruebin/Bad Bunny - BAILE INoLVIDABLE.mp3"
-    ruta_salida = "coro_30s.wav"
+    ruta_entrada = "C:/Users/tokio/OneDrive/Escritorio/Pruebin/The Strokes - Reptilia.mp3"
+    ruta_salida = "The_Strokes_-_Reptilia.wav"
     
     resultado = detectar_y_extraer_coro(ruta_entrada, ruta_salida, duracion_objetivo=30)
     
