@@ -42,6 +42,7 @@ class File(Base):
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, index=True)
     file_path = Column(String)
+    file_type = Column(String, default=None)  # "image", "audio", or None for CSV files
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     user_id = Column(Integer, ForeignKey("users.id"))
 

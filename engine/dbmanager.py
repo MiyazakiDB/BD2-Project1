@@ -15,6 +15,7 @@ from indexes.EHtree import ExtendibleHashTree
 from indexes.Rtree import RTreeIndex, MBR, Circle
 from indexes.ISAMtree import ISAMIndex, test_isam_integrity
 from indexes.noindex import NoIndex
+from indexes.multimediatree import MultimediaSequentialIndex, MultimediaInvertedIndex
 
 import csv
 
@@ -72,6 +73,10 @@ class DBManager:
                         index = BPlusTree(table_schema, column)
                     case IndexType.RTREE:
                         index = RTreeIndex(table_schema, column)
+                    case IndexType.MULTIMEDIA_SEQUENTIAL:
+                        index = MultimediaSequentialIndex(table_schema, column)
+                    case IndexType.MULTIMEDIA_INVERTED:
+                        index = MultimediaInvertedIndex(table_schema, column)
                     case IndexType.NONE:
                         index = NoIndex(table_schema, column)
                     case _:
@@ -194,11 +199,27 @@ class DBManager:
                         self.error("Varchar length was not specified")
                     if column.varchar_length <= 0:
                         self.error("Varchar length must be positive")
+                # Handle multimedia types
+                if column.data_type in [DataType.IMAGE, DataType.AUDIO]:
+                    # Set default index type for multimedia if not specified
+                    if column.index_type == IndexType.NONE:
+                        column.index_type = IndexType.MULTIMEDIA_INVERTED
+                    # Validate index type for multimedia
+                    if column.index_type not in [IndexType.MULTIMEDIA_SEQUENTIAL, IndexType.MULTIMEDIA_INVERTED, IndexType.NONE]:
+                        self.error(f"{column.index_type} index not supported for {column.data_type} data type")
+                # Set default index name if not specified
                 if column.index_type != IndexType.NONE and column.index_name == None:
                     column.index_name = f"idx_{column.name}_{column.index_type}"
             
             os.makedirs(path)
+            
+            # Create index directory for multimedia indexes
+            if any(col.data_type in [DataType.IMAGE, DataType.AUDIO] for col in table_schema.columns):
+                os.makedirs(f"{path}/indexes", exist_ok=True)
+            
             self.save_table_schema(table_schema, path)
+            
+            record_file = RecordFile(table_schema)
 
             for column in table_schema.columns:
                 print(column.index_type)
@@ -406,36 +427,50 @@ class DBManager:
         
 
     def insert(self, table_name:str, values: list, columns: list):
-        tableSchema: TableSchema = self.get_table_schema(table_name)
-        table_columns = [column.name for column in tableSchema.columns]
+        table_schema = self.get_table_schema(table_name)
+        
+        if len(columns) == 0:
+            if len(values) != len(table_schema.columns):
+                self.error(f"the number of values doesn't match the number of columns")
+        elif len(columns) != len(values):
+            self.error(f"the number of values doesn't match the number of columns")
 
-        if columns and sorted(columns) != sorted(table_columns):
-            self.error("The specificed columns don't match the table's columns")
-
-        if len(values) != len(tableSchema.columns):
-            self.error("The number of values doesn't match the number of columns")
-
-        if columns:
-            data_dict = dict(zip(columns, values))
-            reordered_values = [data_dict[col] for col in table_columns]
+        record = Record(table_schema)
+        
+        if len(columns) == 0:
+            record.values = values
         else:
-            reordered_values = values
-
-        for i, value in enumerate(reordered_values):
-            if tableSchema.columns[i].data_type != utils.get_data_type(value):
-                self.error(f"value '{value}' is not of data type {tableSchema.columns[i].data_type}")
-            if tableSchema.columns[i].data_type == DataType.VARCHAR:
-                if len(value) > tableSchema.columns[i].varchar_length:
-                    self.error(f"varchar value '{value}' exceeds column's varchar length")
-
-        record = Record(tableSchema, reordered_values)
-        record_file = RecordFile(tableSchema)
-        pos = record_file.append(record)
-
-        for i, column in enumerate(tableSchema.columns):
-            index = self.get_index(tableSchema, column.name)
-            if index:
-                index.insert(pos, record.values[i])
+            for pos, column_name in enumerate(columns):
+                for i, column in enumerate(table_schema.columns):
+                    if column.name == column_name:
+                        record.values[i] = values[pos]
+                        break
+                else:
+                    self.error(f"column {column_name} doesn't exist")
+        
+        # Validate multimedia data
+        for i, column in enumerate(table_schema.columns):
+            if column.data_type in [DataType.IMAGE, DataType.AUDIO]:
+                path = record.values[i]
+                if not path or not isinstance(path, str):
+                    self.error(f"Invalid path for multimedia column {column.name}")
+                if not os.path.exists(path):
+                    self.error(f"File not found for multimedia column {column.name}: {path}")
+        
+        record_file = RecordFile(table_schema)
+        id = record_file.write(record)
+        
+        for column in table_schema.columns:
+            if column.index_type != IndexType.NONE:
+                pos_column = -1
+                for i, c in enumerate(table_schema.columns):
+                    if c.name == column.name:
+                        pos_column = i
+                        break
+                        
+                if pos_column != -1:
+                    index = self.get_index(table_schema, column.name)
+                    index.insert(id, record.values[pos_column])
 
     def delete(self, delete_schema : DeleteSchema) -> None:
         table = self.get_table_schema(delete_schema.table_name)
@@ -447,58 +482,69 @@ class DBManager:
                 index.delete(value)
 
     def create_index(self, table_name : str, index_name : str, columns : list[str], index_type : IndexType = None):
-        if len(columns) > 1:
-            self.error(f"Index on more than one column not supported")
-        column_name = columns[0]
         table_schema = self.get_table_schema(table_name)
+        
+        if len(columns) != 1:
+            self.error("multicolumn indexes are not supported")
+            
+        column_name = columns[0]
         column = None
-        for i in table_schema.columns:
-            if i.name == column_name:
-                column = i
+        for c in table_schema.columns:
+            if c.name == column_name:
+                column = c
                 break
-        if not column:
-            self.error(f"column with name '{column_name}' doesn't exist")
+                
+        if column is None:
+            self.error(f"column {column_name} doesn't exist")
+            
         if column.index_type != IndexType.NONE:
-            self.error(f"column already has an index")
-
-        if index_type == None:
+            self.error(f"column {column_name} already has an index")
+            
+        if index_type is None:
             if column.data_type == DataType.POINT:
                 index_type = IndexType.RTREE
+            elif column.data_type in [DataType.IMAGE, DataType.AUDIO]:
+                index_type = IndexType.MULTIMEDIA_INVERTED
             else:
-                index_type = IndexType.BTREE
+                index_type = IndexType.HASH
         
-        if index_type == IndexType.RTREE and column.data_type != DataType.POINT:
-            self.error(f"RTree index not supported for {column.data_type} data type")
+        # Validate that the index type is compatible with the data type
         if column.data_type == DataType.POINT and index_type != IndexType.RTREE:
             self.error(f"{index_type} index not supported for POINT data type")
-
+        
+        if column.data_type in [DataType.IMAGE, DataType.AUDIO] and index_type not in [IndexType.MULTIMEDIA_SEQUENTIAL, IndexType.MULTIMEDIA_INVERTED]:
+            self.error(f"{index_type} index not supported for {column.data_type} data type")
+            
+        if index_type == IndexType.RTREE and column.data_type != DataType.POINT:
+            self.error(f"RTree index not supported for {column.data_type} data type")
+        
+        if index_type in [IndexType.MULTIMEDIA_SEQUENTIAL, IndexType.MULTIMEDIA_INVERTED] and column.data_type not in [DataType.IMAGE, DataType.AUDIO]:
+            self.error(f"Multimedia index not supported for {column.data_type} data type")
+            
         column.index_type = index_type
         column.index_name = index_name
-
-        self.get_index(table_schema, column_name)
-
+        
         path = f"{self.tables_path}/{table_name}"
         self.save_table_schema(table_schema, path)
-
+        
         record_file = RecordFile(table_schema)
-        pos = 0
-        max_pos = record_file.max_id()
-
-        indexes = table_schema.get_indexes()
-        column_index = table_schema.columns.index(column)
-        index_structure = indexes[column.name]
-        print(index_type)
-        if index_type == IndexType.ISAM:
-            index_structure.build_index()
-            test_isam_integrity(index_structure)
-        else:
-            while pos < max_pos:
-                record = record_file.read(pos)
-                if record is not None:
-                    value = record.values[column_index]
-                    index_structure.insert(pos, value)
-                pos += 1
+        max_id = record_file.max_id()
+        index = self.get_index(table_schema, column.name)
+        
+        pos_column = -1
+        for i, c in enumerate(table_schema.columns):
+            if c.name == column.name:
+                pos_column = i
+                break
+                
+        if pos_column == -1:
+            self.error(f"column {column_name} not found")
             
+        for id in range(max_id):
+            record = record_file.read(id)
+            if record is not None:
+                index.insert(id, record.values[pos_column])
+
     def drop_index(self, table_name : str, index_name : str) -> None:
         table_schema = self.get_table_schema(table_name)
         for column in table_schema.columns:

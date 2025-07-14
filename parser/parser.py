@@ -6,10 +6,26 @@ from parser.scanner import Token, Scanner
 from engine.model_condition import BinaryOp, Condition, ConditionColumn, ConditionValue, NotCondition, BinaryCondition, BetweenCondition, BooleanColumn
 from engine.model import TableSchema, DataType, IndexType, SelectSchema, DeleteSchema, ConditionSchema, Column
 from engine.dbmanager import DBManager
+from engine.record import RecordFile
+import time
 
 class Stmt:
     def __init__(self):
         pass
+
+# Nuevo tipo de condición para similitud multimedia
+class SimilarityCondition(Condition):
+    def __init__(self, column : ConditionColumn = None, value : str = None):
+        """
+        Condición para búsquedas de similitud multimedia
+        
+        Args:
+            column: Columna multimedia a consultar (imagen o audio)
+            value: Ruta al archivo multimedia de consulta
+        """
+        super().__init__()
+        self.column = column
+        self.value = value  # Ruta al archivo de consulta (imagen/audio)
 
 class SelectStmt(Stmt):
     def __init__(self, table_name : str = None, condition : Condition = None, all : bool = False, column_list : list[str] = None, order_by : str = None, asc : bool = True, limit : int = None):
@@ -463,130 +479,81 @@ class Parser:
         return self.parse_simple_condition()
 
     def parse_simple_condition(self) -> Condition:
-        if not self.match(Token.Type.ID):
-            self.error("expected column name in condition")
-        column_name = self.previous.lexema
-        if self.match(Token.Type.BETWEEN):
-            between_condition = BetweenCondition()
-            between_condition.left = ConditionColumn(column_name)
-            if not self.match_values():
-                self.error("expected a value after BETWEEN keyword")
-            between_condition.mid = ConditionValue(self.str_into_type(self.previous.lexema, self.previous))
-            if not self.match(Token.Type.AND):
-                self.error("expected AND keyword after value in BETWEEN clause")
-            if not self.match_values():
-                self.error("expected a value after AND keyword y BETWEEN clause")
-            between_condition.right = ConditionValue(self.str_into_type(self.previous.lexema, self.previous))
-            return between_condition
-        simple_condition = BinaryCondition()
-        simple_condition.left = ConditionColumn(column_name)
-        if not (self.match(Token.Type.LT) or self.match(Token.Type.GT) or self.match(Token.Type.LE) or self.match(Token.Type.GE) or self.match(Token.Type.EQ) or self.match(Token.Type.NEQ) or self.match(Token.Type.WITHIN) or self.match(Token.Type.KNN)):
-            return BooleanColumn(column_name)
-        
-        match self.previous.type:
-            case Token.Type.LT:
-                simple_condition.op = BinaryOp.LT
-            case Token.Type.GT:
-                simple_condition.op = BinaryOp.GT
-            case Token.Type.LE:
-                simple_condition.op = BinaryOp.LE
-            case Token.Type.GE:
-                simple_condition.op = BinaryOp.GE
-            case Token.Type.EQ:
-                simple_condition.op = BinaryOp.EQ
-            case Token.Type.NEQ:
-                simple_condition.op = BinaryOp.NEQ
-            case Token.Type.WITHIN:
-                if self.match(Token.Type.RECTANGLE):
-                    simple_condition.op = BinaryOp.WR
-                elif self.match(Token.Type.CIRCLE):
-                    simple_condition.op = BinaryOp.WC
-                else:
-                    self.error("expected RECTANGLE or CIRCLE after WITHIN")
-            case Token.Type.KNN:
-                simple_condition.op = BinaryOp.KNN
-            case _:
-                self.error("unknown conditional operator")
-        if simple_condition.op == BinaryOp.WR:
-            if not self.match(Token.Type.LPAR):
-                self.error("expected '(' after WITHIN RECTANGLE operation")
-            if not self.match(Token.Type.FLOATVAL):
-                self.error("expected valid float value for min x coordinate")
-            x_min = self.str_into_type(self.previous.lexema, self.previous)
-            if not self.match(Token.Type.COMMA):
-                self.error("expected comma after min x coordinate")
-            if not self.match(Token.Type.FLOATVAL):
-                self.error("expected valid float value for min x coordinate")
-            y_min = self.str_into_type(self.previous.lexema, self.previous)
-            if not self.match(Token.Type.COMMA):
-                self.error("expected comma after min x coordinate")
-            if not self.match(Token.Type.FLOATVAL):
-                self.error("expected valid float value for min x coordinate")
-            x_max = self.str_into_type(self.previous.lexema, self.previous)
-            if not self.match(Token.Type.COMMA):
-                self.error("expected comma after min x coordinate")
-            if not self.match(Token.Type.FLOATVAL):
-                self.error("expected valid float value for min x coordinate")
-            y_max = self.str_into_type(self.previous.lexema, self.previous)
-            if not self.match(Token.Type.RPAR):
-                self.error("expected ')' after max y coordinate")
-            simple_condition.right = ConditionValue((x_min, y_min, x_max, y_max))
-        elif simple_condition.op == BinaryOp.WC:
-            if not self.match(Token.Type.LPAR):
-                self.error("expected '(' after WITHIN CIRCLE operation")
-            if not self.match(Token.Type.FLOATVAL):
-                self.error("expected valid float value for x coordinate")
-            x = self.str_into_type(self.previous.lexema, self.previous)
-            if not self.match(Token.Type.COMMA):
-                self.error("expected comma after x coordinate")
-            if not self.match(Token.Type.FLOATVAL):
-                self.error("expected valid float value for y coordinate")
-            y = self.str_into_type(self.previous.lexema, self.previous)
-            if not self.match(Token.Type.COMMA):
-                self.error("expected comma after y coordinate")
-            if not self.match(Token.Type.FLOATVAL):
-                self.error("expected valid float value for radius")
-            radius = self.str_into_type(self.previous.lexema, self.previous)
-            if not self.match(Token.Type.RPAR):
-                self.error("expected ')' after radius")
-            simple_condition.right = ConditionValue((x, y, radius))
-        elif simple_condition.op == BinaryOp.KNN:
-            if not self.match(Token.Type.LPAR):
-                self.error("expected '(' after KNN operation")
-            if not self.match(Token.Type.FLOATVAL):
-                self.error("expected valid float value for x coordinate")
-            x = self.str_into_type(self.previous.lexema, self.previous)
-            if not self.match(Token.Type.COMMA):
-                self.error("expected comma after x coordinate")
-            if not self.match(Token.Type.FLOATVAL):
-                self.error("expected valid float value for y coordinate")
-            y = self.str_into_type(self.previous.lexema, self.previous)
-            if not self.match(Token.Type.COMMA):
-                self.error("expected comma after y coordinate")
-            if not self.match(Token.Type.NUMVAL):
-                self.error("expected valid int value for k value")
-            k = self.str_into_type(self.previous.lexema, self.previous)
-            if not self.match(Token.Type.RPAR):
-                self.error("expected ')' after k value")
-            simple_condition.right = ConditionValue((x, y, k))
-        else:
-            if self.match(Token.Type.LPAR):
-                if not self.match(Token.Type.FLOATVAL):
-                    self.error("expected a valid float value por x coordinate on POINT declaration")
-                x = self.str_into_type(self.previous.lexema, self.previous)
-                if not self.match(Token.Type.COMMA):
-                    self.error("expected comma after x coordiante")
-                if not self.match(Token.Type.FLOATVAL):
-                    self.error("expected a valid float value por y coordinate on POINT declaration")
-                y = self.str_into_type(self.previous.lexema, self.previous)
-                if not self.match(Token.Type.RPAR):
-                    self.error("expected ')' after y coordinate")
-                simple_condition.right = ConditionValue((x, y))
+        if self.match(Token.Type.LPAR):
+            cond = self.parse_or_condition()
+            if self.match(Token.Type.RPAR):
+                return cond
             else:
-                if not self.match_values():
-                    self.error("expected a value after conditional operator")
-                simple_condition.right = ConditionValue(self.str_into_type(self.previous.lexema, self.previous))
-        return simple_condition
+                self.error("expected closing parenthesis")
+        
+        if self.match(Token.Type.ID):
+            column_name = self.previous.lexema
+            
+            # Manejar operador de similitud multimedia <->
+            if self.match(Token.Type.SIMILARITY):
+                if self.match(Token.Type.STRINGVAL):
+                    # Esta es una condición de similitud multimedia
+                    query_path = self.previous.lexema
+                    return SimilarityCondition(ConditionColumn(column_name), query_path)
+                else:
+                    self.error("expected string value (file path) after similarity operator")
+            
+            # Manejar otros operadores existentes
+            if self.match(Token.Type.EQ):
+                if self.match(Token.Type.NUMVAL) or self.match(Token.Type.FLOATVAL) or self.match(Token.Type.STRINGVAL) or self.match(Token.Type.BOOLVAL):
+                    val = self.str_into_type(self.previous.lexema, self.previous)
+                    return BinaryCondition(ConditionColumn(column_name), BinaryOp.EQ, ConditionValue(val))
+                else:
+                    self.error("expected a value")
+            elif self.match(Token.Type.NEQ):
+                if self.match(Token.Type.NUMVAL) or self.match(Token.Type.FLOATVAL) or self.match(Token.Type.STRINGVAL) or self.match(Token.Type.BOOLVAL):
+                    val = self.str_into_type(self.previous.lexema, self.previous)
+                    return BinaryCondition(ConditionColumn(column_name), BinaryOp.NEQ, ConditionValue(val))
+                else:
+                    self.error("expected a value")
+            elif self.match(Token.Type.LT):
+                if self.match(Token.Type.NUMVAL) or self.match(Token.Type.FLOATVAL) or self.match(Token.Type.STRINGVAL):
+                    val = self.str_into_type(self.previous.lexema, self.previous)
+                    return BinaryCondition(ConditionColumn(column_name), BinaryOp.LT, ConditionValue(val))
+                else:
+                    self.error("expected a value")
+            elif self.match(Token.Type.GT):
+                if self.match(Token.Type.NUMVAL) or self.match(Token.Type.FLOATVAL) or self.match(Token.Type.STRINGVAL):
+                    val = self.str_into_type(self.previous.lexema, self.previous)
+                    return BinaryCondition(ConditionColumn(column_name), BinaryOp.GT, ConditionValue(val))
+                else:
+                    self.error("expected a value")
+            elif self.match(Token.Type.LE):
+                if self.match(Token.Type.NUMVAL) or self.match(Token.Type.FLOATVAL) or self.match(Token.Type.STRINGVAL):
+                    val = self.str_into_type(self.previous.lexema, self.previous)
+                    return BinaryCondition(ConditionColumn(column_name), BinaryOp.LE, ConditionValue(val))
+                else:
+                    self.error("expected a value")
+            elif self.match(Token.Type.GE):
+                if self.match(Token.Type.NUMVAL) or self.match(Token.Type.FLOATVAL) or self.match(Token.Type.STRINGVAL):
+                    val = self.str_into_type(self.previous.lexema, self.previous)
+                    return BinaryCondition(ConditionColumn(column_name), BinaryOp.GE, ConditionValue(val))
+                else:
+                    self.error("expected a value")
+            elif self.match(Token.Type.BETWEEN):
+                a = None
+                b = None
+                if self.match(Token.Type.NUMVAL) or self.match(Token.Type.FLOATVAL):
+                    a = self.str_into_type(self.previous.lexema, self.previous)
+                else:
+                    self.error("expected a numeric value")
+                if self.match(Token.Type.AND):
+                    if self.match(Token.Type.NUMVAL) or self.match(Token.Type.FLOATVAL):
+                        b = self.str_into_type(self.previous.lexema, self.previous)
+                    else:
+                        self.error("expected a numeric value")
+                else:
+                    self.error("expected AND keyword")
+                return BetweenCondition(ConditionColumn(column_name), a, b)
+            else:
+                return BooleanColumn(ConditionColumn(column_name))
+        else:
+            self.error("unexpected condition value")
 
 
 class PrintError(Exception):
@@ -694,6 +661,8 @@ class Printer:
             return self.value_to_str(condition)
         elif condition_type == ConditionColumn:
             return condition.column_name    
+        elif condition_type == SimilarityCondition:
+            return f"{self.condition_column_to_str(condition.column)} <-> '{condition.value}'"
         else:
             self.error("unknown condition type")
 
@@ -883,7 +852,7 @@ class RuntimeError(Exception):
 
 class Interpreter:
     def __init__(self):
-        self.dbmanager = DBManager()
+        self.db_manager = DBManager()
 
     def error(self, error : str):
         raise RuntimeError(error)
@@ -927,29 +896,50 @@ class Interpreter:
             self.error("unknown statement type")
 
     def interpret_select_stmt(self, stmt : SelectStmt):
-        select_schema = SelectSchema(stmt.table_name, ConditionSchema(stmt.condition), stmt.all, stmt.column_list, stmt.order_by, stmt.asc, stmt.limit)
-        return self.dbmanager.select(select_schema)
+        table_schema = self.db_manager.get_table_schema(stmt.table_name)
+        
+        # Verificar si es una consulta de similitud multimedia
+        if stmt.condition and isinstance(stmt.condition, SimilarityCondition):
+            return select_with_multimedia_similarity(
+                table_schema, 
+                stmt.condition, 
+                stmt.limit
+            )
+        
+        # Manejo de select normal
+        select_schema = SelectSchema(
+            table_name=stmt.table_name,
+            condition_schema=ConditionSchema(stmt.condition) if stmt.condition else None,
+            all=stmt.all,
+            column_list=stmt.column_list,
+            order_by=stmt.order_by,
+            asc=stmt.asc,
+            limit=stmt.limit
+        )
+        
+        result = self.db_manager.select(select_schema)
+        return result
 
     def interpret_create_table_stmt(self, stmt : CreateTableStmt):
         column_list = [Column(column_def.column_name, column_def.data_type, column_def.is_primary_key, column_def.index_type, column_def.varchar_limit) for column_def in stmt.column_def_list]
         table_schema = TableSchema(stmt.table_name, column_list)
-        self.dbmanager.create_table(table_schema, stmt.if_not_exists)
+        self.db_manager.create_table(table_schema, stmt.if_not_exists)
 
     def interpret_drop_table_stmt(self, stmt : DropTableStmt):
-        self.dbmanager.drop_table(stmt.table_name, stmt.if_exists)
+        self.db_manager.drop_table(stmt.table_name, stmt.if_exists)
 
     def interpret_insert_stmt(self, stmt : InsertStmt):
-        self.dbmanager.insert(stmt.table_name, stmt.value_list, stmt.column_list)
+        self.db_manager.insert(stmt.table_name, stmt.value_list, stmt.column_list)
 
     def interpret_delete_stmt(self, stmt : DeleteStmt):
         delete_schema = DeleteSchema(stmt.table_name, ConditionSchema(stmt.condition))
-        self.dbmanager.delete(delete_schema)
+        self.db_manager.delete(delete_schema)
 
     def interpret_create_index_stmt(self, stmt : CreateIndexStmt):
-        self.dbmanager.create_index(stmt.table_name, stmt.index_name, stmt.column_list, stmt.index_type)
+        self.db_manager.create_index(stmt.table_name, stmt.index_name, stmt.column_list, stmt.index_type)
 
     def interpret_drop_index_stmt(self, stmt : DropIndexStmt):
-        self.dbmanager.drop_index(stmt.table_name, stmt.index_name)
+        self.db_manager.drop_index(stmt.table_name, stmt.index_name)
 
 
 def execute_sql(sql:str):
@@ -979,3 +969,65 @@ def print_sql(sql: str):
         print(printer.print(sql_parse))
     except RuntimeError as e:
         return None, str(e)
+
+def select_with_multimedia_similarity(table_schema, similarity_condition, limit=None):
+    """
+    Realizar una búsqueda por similitud multimedia
+    
+    Args:
+        table_schema: Esquema de la tabla
+        similarity_condition: Condición de similitud con columna y ruta de consulta
+        limit: Número máximo de resultados a devolver
+        
+    Returns:
+        dict: Resultados con columnas y registros
+    """
+    # Obtener la columna del esquema
+    column_name = similarity_condition.column.name
+    column = table_schema.get_column_by_name(column_name)
+    
+    if not column:
+        raise RuntimeError(f"Columna {column_name} no encontrada en tabla {table_schema.table_name}")
+    
+    # Verificar si la columna es de tipo multimedia (IMAGE o AUDIO)
+    if column.data_type != DataType.IMAGE and column.data_type != DataType.AUDIO:
+        raise RuntimeError(f"Columna {column_name} no es de tipo multimedia (IMAGE o AUDIO)")
+    
+    # Verificar si la columna tiene un índice adecuado
+    if column.index_type not in (IndexType.MULTIMEDIA_SEQUENTIAL, IndexType.MULTIMEDIA_INVERTED):
+        raise RuntimeError(f"Columna {column_name} no tiene un índice multimedia")
+    
+    # Obtener el índice
+    db_manager = DBManager()
+    index = db_manager.get_index(table_schema, column_name)
+    
+    # Realizar búsqueda por similitud
+    query_path = similarity_condition.value
+    k = limit if limit else 10  # Por defecto 10 resultados si no se especifica límite
+    
+    # Obtener resultados
+    start_time = time.time()
+    results = index.similarity_search(query_path, k)
+    elapsed_time = time.time() - start_time
+    
+    # Extraer IDs de registros
+    record_ids = [record_id for record_id, _, _ in results]
+    
+    # Obtener registros
+    records = []
+    record_file = RecordFile(table_schema)
+    for record_id in record_ids:
+        record = record_file.read(record_id)
+        if record:
+            records.append(record.values)
+    
+    # Preparar columnas de resultado
+    columns = [col.name for col in table_schema.columns]
+    
+    print(f"Búsqueda multimedia completada en {elapsed_time:.4f} segundos")
+    
+    return {
+        "columns": columns,
+        "records": records,
+        "elapsed_time": elapsed_time
+    }

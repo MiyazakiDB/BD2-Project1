@@ -12,6 +12,8 @@ class DataType(Enum):
     DATE = auto()
     BOOL = auto()
     POINT = auto()
+    IMAGE = auto()  # Tipo para archivos de imagen
+    AUDIO = auto()  # Tipo para archivos de audio
 
     def __str__(self):
         return self.name
@@ -24,18 +26,21 @@ class IndexType(Enum):
     RTREE = auto()
     BRIN = auto()
     NONE = auto()
+    MULTIMEDIA_SEQUENTIAL = auto()  # Índice para búsqueda KNN secuencial en multimedia
+    MULTIMEDIA_INVERTED = auto()    # Índice invertido para búsqueda KNN en multimedia
 
     def __str__(self):
         return self.name
 
 class Column:
-    def __init__(self, name, data_type : DataType, is_primary = False, index_type = IndexType.NONE, varchar_length = None, index_name = None):
+    def __init__(self, name, data_type : DataType, is_primary = False, index_type = IndexType.NONE, varchar_length = None, index_name = None, media_path = None):
         self.name = name
         self.data_type = data_type
         self.is_primary = is_primary
         self.index_type = index_type
         self.index_name = index_name
         self.varchar_length = varchar_length
+        self.media_path = media_path  # Ruta al archivo multimedia para tipos IMAGE o AUDIO
 
 class TableSchema:
     def __init__(self, table_name: str = None, columns: list[Column] = None):
@@ -78,6 +83,12 @@ class TableSchema:
             case IndexType.RTREE:
                 from indexes.Rtree import RTreeIndex
                 return RTreeIndex(self, column)
+            case IndexType.MULTIMEDIA_SEQUENTIAL:
+                from indexes.multimediatree import MultimediaSequentialIndex
+                return MultimediaSequentialIndex(self, column)
+            case IndexType.MULTIMEDIA_INVERTED:
+                from indexes.multimediatree import MultimediaInvertedIndex
+                return MultimediaInvertedIndex(self, column)
             case IndexType.BRIN:
                 pass
             case IndexType.NONE:
