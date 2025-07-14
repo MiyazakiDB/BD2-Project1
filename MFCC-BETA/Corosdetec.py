@@ -7,7 +7,8 @@ from collections import Counter
 from scipy.signal import find_peaks
 
 # === CONFIGURACIÓN ===
-ruta_audio = "C:/Users/tokio/OneDrive/Escritorio/Pruebin/Bad Bunny - BAILE INoLVIDABLE.mp3"
+# Ejemplo: usar audio de la carpeta audio_to_see
+ruta_audio = os.path.join(os.path.dirname(__file__), "audio_to_see", "Bad_Bunny_-_BAILE_INoLVIDABLE_preview.wav")
 salida_audio = "coro_Bad Bunny_refinado.wav"
 
 

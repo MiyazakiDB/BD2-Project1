@@ -5,12 +5,12 @@ from sklearn.cluster import KMeans
 import joblib
 
 # === CONFIGURACIÓN ===
-AUDIO_DIR = r"C:\Users\tokio\OneDrive\Escritorio\BD2-Project1\MFCC-BETA\previews"
+AUDIO_DIR = os.path.join(os.path.dirname(__file__), "previews")
 N_MFCC = 13           # Número de coeficientes MFCC
 N_CLUSTERS = 128      # Número de acoustic words
 SAMPLE_RATE = 22050   # Sample rate estándar para librosa
 
-model_dir = r"C:\Users\tokio\OneDrive\Escritorio\BD2-Project1\MFCC-BETA\modelK"
+model_dir = os.path.join(os.path.dirname(__file__), "modelK")
 
 # === FUNCIÓN PARA EXTRAER MFCC ===
 def extract_mfcc_from_file(file_path, n_mfcc=N_MFCC, sr=SAMPLE_RATE):

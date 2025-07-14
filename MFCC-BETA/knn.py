@@ -8,7 +8,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from mfccFunction import extract_mfcc_from_file
 
 # === CONFIGURACIÓN ===
-model_dir = r"C:\Users\tokio\OneDrive\Escritorio\BD2-Project1\MFCC-BETA\modelK"
+model_dir = os.path.join(os.path.dirname(__file__), "modelK")
 CODEBOOK_PATH = os.path.join(model_dir, "acoustic_codebook.pkl")
 TFIDF_CSV_PATH = os.path.join(model_dir, "audio_histograms_tfidf.csv")
 
@@ -137,7 +137,7 @@ def search_similar_audios(query_audio_path, top_k=None):
 # === EJEMPLO DE USO ===
 if __name__ == "__main__":
     # Ejemplo de uso
-    query_path = r"C:\Users\tokio\OneDrive\Escritorio\BD2-Project1\MFCC-BETA\audio_to_see\The_Strokes_-_Reptilia.wav"
+    query_path = os.path.join(os.path.dirname(__file__), "audio_to_see", "The_Strokes_-_Reptilia.wav")
     
     # Buscar los 10 audios más similares
     resultados = search_similar_audios(query_path, top_k=10)

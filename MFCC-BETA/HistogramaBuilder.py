@@ -7,8 +7,8 @@ from tqdm import tqdm
 import pandas as pd
 
 # === CONFIGURACIÓN ===
-AUDIO_DIR = r"C:\Users\tokio\OneDrive\Escritorio\BD2-Project1\MFCC-BETA\previews"
-model_dir = r"C:\Users\tokio\OneDrive\Escritorio\BD2-Project1\MFCC-BETA\modelK"
+AUDIO_DIR = os.path.join(os.path.dirname(__file__), "previews")
+model_dir = os.path.join(os.path.dirname(__file__), "modelK")
 CODEBOOK_PATH = os.path.join(model_dir, "acoustic_codebook.pkl")
 N_MFCC = 13
 SAMPLE_RATE = 22050

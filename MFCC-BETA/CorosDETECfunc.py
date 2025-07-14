@@ -297,9 +297,9 @@ def detectar_y_extraer_coro(ruta_audio, salida_audio, duracion_objetivo=30, most
 
 # === EJEMPLO DE USO ===
 if __name__ == "__main__":
-    # Uso simple
-    ruta_entrada = "C:/Users/tokio/OneDrive/Escritorio/Pruebin/The Strokes - Reptilia.mp3"
-    ruta_salida = "The_Strokes_-_Reptilia.wav"
+    # Uso simple - usar audio de la carpeta audio_to_see
+    ruta_entrada = os.path.join(os.path.dirname(__file__), "audio_to_see", "The_Strokes_-_Reptilia.wav")
+    ruta_salida = "The_Strokes_-_Reptilia_coro.wav"
     
     resultado = detectar_y_extraer_coro(ruta_entrada, ruta_salida, duracion_objetivo=30)
     

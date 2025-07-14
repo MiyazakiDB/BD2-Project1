@@ -15,10 +15,11 @@ except ImportError:
     exit(1)
 
 # === Configuración de carpetas ===
-CSV_PATH = r"C:\Users\tokio\OneDrive\Escritorio\spotify_songs.csv"
-OUTPUT_DIR = Path(r"C:\Users\tokio\OneDrive\Escritorio\BD2-Project1\MFCC-BETA\previews")
-RAWDATA_DIR = Path(r"C:\Users\tokio\OneDrive\Escritorio\BD2-Project1\MFCC-BETA\rawdata")
-PROGRESS_FILE = Path(r"C:\Users\tokio\OneDrive\Escritorio\BD2-Project1\MFCC-BETA\progreso.json")
+BASE_DIR = Path(__file__).parent
+CSV_PATH = BASE_DIR.parent / "spotify_songs.csv"  # Buscar en el directorio padre del proyecto
+OUTPUT_DIR = BASE_DIR / "previews"
+RAWDATA_DIR = BASE_DIR / "rawdata"
+PROGRESS_FILE = BASE_DIR / "progreso.json"
 
 def cargar_progreso():
     """Carga el progreso anterior si existe"""
