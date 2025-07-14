@@ -1,12 +1,14 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import os
 import tempfile
 import shutil
 from typing import List, Optional
 from pydantic import BaseModel
 import uvicorn
+from mfccFunction import extract_mfcc_from_file
 
 # Importar tu clase existente
 from knn import AudioSimilaritySearcher
@@ -28,11 +30,40 @@ class HealthResponse(BaseModel):
     database_size: int
     model_loaded: bool
 
+class VectorResponse(BaseModel):
+    filename: str
+    vector: List[float]
+    vector_type: str
+    vector_size: int
+
+# === VARIABLE GLOBAL PARA EL SEARCHER ===
+searcher = None
+
+# === LIFESPAN EVENT HANDLER ===
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    global searcher
+    try:
+        print("🚀 Inicializando sistema de búsqueda...")
+        searcher = AudioSimilaritySearcher()
+        print("✅ Sistema inicializado correctamente")
+    except Exception as e:
+        print(f"❌ Error al inicializar: {e}")
+        raise
+    
+    yield
+    
+    # Shutdown
+    print("🛑 Cerrando sistema...")
+    searcher = None
+
 # === CONFIGURACIÓN DE LA API ===
 app = FastAPI(
     title="Audio Similarity Search API",
     description="API para búsqueda de audios similares usando MFCC y TF-IDF",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Configurar CORS para permitir requests desde frontend
@@ -43,21 +74,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# === INICIALIZAR EL SISTEMA ===
-searcher = None
-
-@app.on_event("startup")
-async def startup_event():
-    """Inicializa el sistema al arrancar la API"""
-    global searcher
-    try:
-        print("Inicializando sistema de búsqueda...")
-        searcher = AudioSimilaritySearcher()
-        print("✅ Sistema inicializado correctamente")
-    except Exception as e:
-        print(f"❌ Error al inicializar: {e}")
-        raise
 
 # === ENDPOINTS ===
 
@@ -132,6 +148,46 @@ async def search_by_upload(
         except:
             pass
 
+@app.get("/vector", response_model=VectorResponse)
+async def get_vector_representation(
+    audio_path: str = Query(..., description="Ruta del archivo de audio"),
+    tfidf: bool = Query(True, description="Retornar vector TF-IDF si True, histograma crudo si False")
+):
+    """Obtener representación vectorial de un archivo de audio"""
+    if not searcher:
+        raise HTTPException(status_code=503, detail="Sistema no inicializado")
+
+    if not os.path.exists(audio_path):
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    try:
+        # Extraer MFCC
+        mfcc = extract_mfcc_from_file(audio_path)
+        if mfcc.shape[0] == 0:
+            raise HTTPException(status_code=400, detail="No se pudieron extraer características MFCC del audio")
+
+        if tfidf:
+            # Usar el método existente para obtener vector TF-IDF
+            vector = searcher.audio_to_tfidf_vector(audio_path)
+            vector_type = "tfidf"
+        else:
+            # Crear histograma crudo
+            histogram = searcher.create_histogram(mfcc)
+            vector = histogram
+            vector_type = "histogram"
+
+        return VectorResponse(
+            filename=os.path.basename(audio_path),
+            vector=vector.tolist(),
+            vector_type=vector_type,
+            vector_size=len(vector)
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error procesando audio: {str(e)}")
+
+
+
 @app.get("/search/file", response_model=SearchResponse)
 async def search_by_path(
     audio_path: str = Query(..., description="Ruta del archivo de audio"),
@@ -202,10 +258,13 @@ async def root():
     return {
         "message": "Audio Similarity Search API",
         "version": "1.0.0",
+        "status": "running",
+        "database_loaded": searcher is not None,
         "endpoints": {
             "health": "/health",
             "search_upload": "/search/upload",
-            "search_file": "/search/file",
+            "search_file": "/search/file", 
+            "vector": "/vector",
             "database_list": "/database/list",
             "docs": "/docs"
         }
