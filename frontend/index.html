@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiyazakiDB</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SQL Query System</h1>
+            <div id="user-info" class="hidden">
+                <span id="username"></span>
+                <button id="logoutBtn">Logout</button>
+            </div>
+        </header>
+
+        <main>
+            <!-- Authentication Section -->
+            <section id="authentication">
+                <div class="auth-container">
+                    <div class="auth-form">
+                        <h2>Login</h2>
+                        <form id="loginForm">
+                            <div class="form-group">
+                                <label for="loginEmail">Email:</label>
+                                <input type="email" id="loginEmail" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="loginPassword">Password:</label>
+                                <input type="password" id="loginPassword" required>
+                            </div>
+                            <button type="submit">Login</button>
+                        </form>
+                    </div>
+                    
+                    <div class="auth-form">
+                        <h2>Register</h2>
+                        <form id="registerForm">
+                            <div class="form-group">
+                                <label for="registerEmail">Email:</label>
+                                <input type="email" id="registerEmail" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="registerUsername">Username:</label>
+                                <input type="text" id="registerUsername" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="registerPassword">Password:</label>
+                                <input type="password" id="registerPassword" required>
+                            </div>
+                            <button type="submit">Register</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="hidden">
+                <h2>Dashboard</h2>
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h3>Your Tables</h3>
+                        <ul id="tablesList"></ul>
+                    </div>
+                    <div class="card">
+                        <h3>Your CSV Files</h3>
+                        <ul id="filesList"></ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Query Section -->
+            <section id="query-section" class="hidden">
+                <h2>SQL Query Editor</h2>
+                <div class="query-editor">
+                    <textarea id="queryInput" placeholder="Enter your SQL query here..."></textarea>
+                    <button id="executeQueryBtn">Execute Query</button>
+                </div>
+                <div id="queryMessage" class="message"></div>
+                <div class="result-container">
+                    <h3>Query Results</h3>
+                    <table id="resultTable"></table>
+                </div>
+            </section>
+
+            <!-- Upload Section -->
+            <section id="upload-section" class="hidden">
+                <div class="upload-container">
+                    <div class="card">
+                        <h3>Upload CSV File</h3>
+                        <div class="form-group">
+                            <label for="csvFileInput">Select CSV File:</label>
+                            <input type="file" id="csvFileInput" accept=".csv">
+                            <button id="uploadFileBtn">Upload</button>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>Import CSV to Table</h3>
+                        <div class="form-group">
+                            <label for="userFiles">Select CSV File:</label>
+                            <select id="userFiles">
+                                <option value="">Select a file</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="tableName">Select Table:</label>
+                            <select id="tableName">
+                                <option value="">Select a table</option>
+                            </select>
+                        </div>
+                        <button id="importBtn">Import Data</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2023 SQL Query System</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

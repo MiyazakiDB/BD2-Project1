@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
-import { Form, Button, Alert, Card, Row, Col, Badge } from 'react-bootstrap';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { tableService } from '../../services/api';
 import './Tables.css';
+
+// API Base URL - igual que en app.js
+const API_BASE_URL = 'http://localhost:8000';
+
+// IMPORTANTE: Acceder directamente al token como variable global, igual que en app.js
+let authToken = localStorage.getItem('authToken') || null;
 
 const CreateTable = () => {
   const navigate = useNavigate();
@@ -12,17 +16,57 @@ const CreateTable = () => {
   const [error, setError] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [hasHeaders, setHasHeaders] = useState(true);
+  const [sqlPreview, setSqlPreview] = useState('');
+  const [files, setFiles] = useState([]);
 
-  const dataTypes = ['INT', 'FLOAT', 'VARCHAR', 'BOOLEAN', 'DATE'];
+  const dataTypes = ['INT', 'FLOAT', 'VARCHAR', 'TEXT', 'BOOLEAN', 'DATE', 'TIMESTAMP'];
   const indexTypes = [
     { value: '', label: 'No Index' },
-    { value: 'AVL', label: 'AVL' },
-    { value: 'HASH', label: 'Hash' },
-    { value: 'BTREE', label: 'B+Tree' },
-    { value: 'GIN', label: 'GIN' },
-    { value: 'ISAM', label: 'ISAM' },
-    { value: 'RTREE', label: 'RTree' }
+    { value: 'INDEX', label: 'Standard Index' },
+    { value: 'UNIQUE', label: 'Unique Index' },
+    { value: 'PRIMARY KEY', label: 'Primary Key' }
   ];
+
+  useEffect(() => {
+    // Actualizar token desde localStorage como en app.js
+    authToken = localStorage.getItem('authToken') || null;
+
+    if (!authToken) {
+      navigate('/login');
+      return;
+    }
+
+    // Cargar archivos del usuario para importación después de crear tabla
+    loadUserFiles();
+    
+    // Generar preview de SQL cada vez que cambian las columnas o nombre de tabla
+    generateSqlPreview();
+  }, [tableName, columns]);
+
+  const loadUserFiles = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/files/`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('authToken');
+          authToken = null;
+          navigate('/login');
+          return;
+        }
+        throw new Error('Failed to load files');
+      }
+
+      const data = await response.json();
+      setFiles(data || []);
+    } catch (error) {
+      console.error('Error loading files:', error);
+    }
+  };
 
   const handleColumnChange = (index, field, value) => {
     const newColumns = [...columns];
@@ -41,6 +85,50 @@ const CreateTable = () => {
     }
   };
 
+  // Generar sentencia SQL CREATE TABLE
+  const generateSqlPreview = () => {
+    if (!tableName) {
+      setSqlPreview('');
+      return;
+    }
+
+    let sql = `CREATE TABLE ${tableName} (\n`;
+    
+    const columnDefinitions = columns.map((col, index) => {
+      if (!col.name) return null;
+      
+      let definition = `  ${col.name} ${col.data_type}`;
+      
+      if (col.data_type === 'VARCHAR') {
+        const size = col.size || 255;
+        definition += `(${size})`;
+      }
+      
+      if (col.is_indexed && col.index_type === 'PRIMARY KEY') {
+        definition += ' PRIMARY KEY';
+      } else if (col.is_indexed && col.index_type === 'UNIQUE') {
+        definition += ' UNIQUE';
+      }
+      
+      return definition;
+    }).filter(Boolean);
+    
+    sql += columnDefinitions.join(',\n');
+    
+    // Agregar índices separados
+    const separateIndexes = columns
+      .filter(col => col.is_indexed && col.name && col.index_type === 'INDEX')
+      .map(col => `  INDEX (${col.name})`);
+    
+    if (separateIndexes.length > 0) {
+      sql += ',\n' + separateIndexes.join(',\n');
+    }
+    
+    sql += '\n);';
+    
+    setSqlPreview(sql);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -49,43 +137,76 @@ const CreateTable = () => {
       return;
     }
 
-    if (!selectedFile) {
-      setError('File is required');
+    if (!columns.some(col => col.name.trim())) {
+      setError('At least one column with a name is required');
       return;
     }
 
     setLoading(true);
     setError('');
 
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('table_name', tableName);
-    formData.append('has_headers', hasHeaders.toString());
-    formData.append(
-      'columns',
-      JSON.stringify(
-        columns.map((col) => ({
-          name: col.name,
-          data_type: col.data_type,
-          size: col.data_type === 'VARCHAR' ? col.size || 255 : null,
-          index_type: col.is_indexed && col.index_type ? col.index_type : null,
-        }))
-      )
-    );
-
     try {
-      await tableService.createTable(formData);
-      navigate('/tables');
-    } catch (err) {
-      const errorDetail = err.response?.data?.detail;
-
-      if (Array.isArray(errorDetail)) {
-        setError(errorDetail.map((e) => e.msg).join(', '));
-      } else if (typeof errorDetail === 'string') {
-        setError(errorDetail);
-      } else {
-        setError('Error creating table. Please try again.');
+      // 1. Ejecutar CREATE TABLE exactamente como en app.js executeQuery()
+      const response = await fetch(`${API_BASE_URL}/sql/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ query: sqlPreview })
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.detail || 'Failed to create table');
       }
+      
+      // 2. Si también hay un archivo seleccionado, importarlo a la tabla recién creada
+      if (selectedFile) {
+        // Similar a uploadFile() de app.js
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        
+        const uploadResponse = await fetch(`${API_BASE_URL}/files/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: formData
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload file');
+        }
+        
+        const fileData = await uploadResponse.json();
+        const fileId = fileData.id;
+        
+        // Similar a importCSVToTable() de app.js
+        const importResponse = await fetch(`${API_BASE_URL}/files/${fileId}/import/${tableName}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+        
+        if (!importResponse.ok) {
+          throw new Error('Failed to import data to table');
+        }
+        
+        const importResult = await importResponse.json();
+        alert(`Table created and data imported: ${importResult.success_count} rows imported successfully, ${importResult.error_count} errors`);
+      } else {
+        alert('Table created successfully!');
+      }
+      
+      // Navegar a la tabla creada
+      navigate(`/table/${tableName}`);
+      
+    } catch (err) {
+      console.error('Error creating table:', err);
+      setError(err.message || 'Failed to create table');
     } finally {
       setLoading(false);
     }
@@ -100,8 +221,8 @@ const CreateTable = () => {
             ← Back
           </Link>
           <div className="create-table-title-section">
-            <h1 className="create-table-main-title">➕ Create New Table</h1>
-            <p className="create-table-subtitle">Define your table structure and upload data</p>
+            <h1 className="create-table-main-title">🏗️ Create Table</h1>
+            <p className="create-table-subtitle">Define your SQL table structure and optionally import data</p>
           </div>
         </div>
 
@@ -126,46 +247,6 @@ const CreateTable = () => {
                 placeholder="Enter table name (e.g., products, customers)"
                 required
               />
-            </div>
-
-            {/* File Section */}
-            <div className="create-table-section">
-              <label className="create-table-label">Data File</label>
-              <input
-                type="file"
-                onChange={(e) => setSelectedFile(e.target.files[0])}
-                className="create-table-input"
-                accept=".csv,.xlsx,.xls"
-                required
-              />
-              <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '0.5rem 0 0 0' }}>
-                Upload CSV, XLSX, or XLS files with your data
-              </p>
-            </div>
-
-            {/* Headers Section */}
-            <div className="create-table-section">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <label className="create-table-label" style={{ marginBottom: 0 }}>File Header Settings</label>
-                <span className={`badge ${hasHeaders ? 'bg-success' : 'bg-secondary'}`} style={{ 
-                  background: hasHeaders ? '#16a34a' : '#64748b',
-                  color: 'white',
-                  padding: '4px 8px',
-                  borderRadius: '12px',
-                  fontSize: '0.8rem'
-                }}>
-                  {hasHeaders ? 'Headers: YES' : 'Headers: NO'}
-                </span>
-              </div>
-              <label className="create-table-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={hasHeaders}
-                  onChange={(e) => setHasHeaders(e.target.checked)}
-                  className="create-table-checkbox"
-                />
-                <span className="create-table-checkbox-text">File has headers (first line contains column names)</span>
-              </label>
             </div>
 
             {/* Columns Section */}
@@ -205,6 +286,17 @@ const CreateTable = () => {
                         ))}
                       </select>
 
+                      {column.data_type === 'VARCHAR' && (
+                        <input
+                          type="number"
+                          value={column.size || 255}
+                          onChange={(e) => handleColumnChange(index, 'size', parseInt(e.target.value) || 255)}
+                          className="create-table-column-input"
+                          placeholder="Size"
+                          style={{ width: '80px' }}
+                        />
+                      )}
+
                       <label className="create-table-checkbox-label">
                         <input
                           type="checkbox"
@@ -212,18 +304,20 @@ const CreateTable = () => {
                           onChange={(e) => handleColumnChange(index, 'is_indexed', e.target.checked)}
                           className="create-table-checkbox"
                         />
-                        <span className="create-table-checkbox-text">Create Index</span>
+                        <span className="create-table-checkbox-text">Index</span>
                       </label>
-                      <select
-                        value={column.index_type || ''}
-                        onChange={e => handleColumnChange(index, 'index_type', e.target.value)}
-                        className="create-table-column-select"
-                        disabled={!column.is_indexed}
-                      >
-                        {indexTypes.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
+
+                      {column.is_indexed && (
+                        <select
+                          value={column.index_type || ''}
+                          onChange={e => handleColumnChange(index, 'index_type', e.target.value)}
+                          className="create-table-column-select"
+                        >
+                          {indexTypes.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
 
                     {columns.length > 1 && (
@@ -240,16 +334,48 @@ const CreateTable = () => {
               </div>
             </div>
 
+            {/* SQL Preview Section */}
+            <div className="create-table-section">
+              <label className="create-table-label">SQL Preview</label>
+              <div className="create-table-sql-preview">
+                <pre>{sqlPreview || "-- SQL will appear here as you define your table --"}</pre>
+              </div>
+            </div>
+
+            {/* Data Import Section (opcional) */}
+            <div className="create-table-section">
+              <label className="create-table-label">Data Import (Optional)</label>
+              <input
+                type="file"
+                onChange={(e) => setSelectedFile(e.target.files[0])}
+                className="create-table-input"
+                accept=".csv"
+              />
+              <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '0.5rem 0 0 0' }}>
+                Optional: Upload a CSV to import data after table creation
+              </p>
+              
+              <label className="create-table-checkbox-label" style={{ marginTop: '0.5rem' }}>
+                <input
+                  type="checkbox"
+                  checked={hasHeaders}
+                  onChange={(e) => setHasHeaders(e.target.checked)}
+                  className="create-table-checkbox"
+                />
+                <span className="create-table-checkbox-text">CSV file has headers in first row</span>
+              </label>
+            </div>
+
             {/* Action Buttons */}
             <div className="create-table-actions">
               <Link to="/tables" className="create-table-cancel-btn">
-                ← Back to Tables
+                ← Cancel
               </Link>
 
               <button
                 type="submit"
-                disabled={loading}
-                className={`create-table-submit-btn ${loading ? 'create-table-submit-disabled' : ''}`}
+                disabled={loading || !sqlPreview}
+                className={`create-table-submit-btn ${(loading || !sqlPreview) ? 'create-table-submit-disabled' : ''}`}
               >
                 {loading ? (
                   <>

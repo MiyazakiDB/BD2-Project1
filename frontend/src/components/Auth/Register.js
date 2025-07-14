@@ -3,7 +3,9 @@ import './Auth.css';
 import WaveSketch from './WaveSketch';
 import logo from '../../assets/logo.svg';
 import { Link, useNavigate } from 'react-router-dom';
-import { authService } from '../../services/api';
+
+// API Base URL - igual que en app.js
+const API_BASE_URL = 'http://localhost:8000';
 
 const Register = ({ onLogin }) => {
   const [userData, setUserData] = useState({ username: '', email: '', password: '' });
@@ -20,66 +22,80 @@ const Register = ({ onLogin }) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    
     try {
-      const response = await authService.register(userData);
+      // Lógica exacta de app.js para register - con fallback XMLHttpRequest
+      const registerUser = () => {
+        return new Promise((resolve, reject) => {
+          try {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${API_BASE_URL}/register`, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.onreadystatechange = function () {
+              if (xhr.readyState === 4) {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  resolve(JSON.parse(xhr.responseText));
+                } else {
+                  try {
+                    const errorData = JSON.parse(xhr.responseText);
+                    reject(new Error(errorData.detail || 'Registration failed'));
+                  } catch (e) {
+                    reject(new Error('Registration failed with status: ' + xhr.status));
+                  }
+                }
+              }
+            };
+            xhr.send(JSON.stringify({ 
+              email: userData.email, 
+              username: userData.username, 
+              password: userData.password 
+            }));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      };
 
-      // Si el registro es exitoso, también inicia sesión automáticamente
-      if (response.data && response.data.token) {
-        localStorage.setItem('token', response.data.token);
-        onLogin();
-        navigate('/files');
-      } else if (response.data && response.data.message) {
-        // Intentar iniciar sesión automáticamente con las credenciales
-        try {
-          const loginResponse = await authService.login({
-            username: userData.username,
-            password: userData.password
-          });
-          if (loginResponse.data && loginResponse.data.token) {
-            localStorage.setItem('token', loginResponse.data.token);
-            onLogin();
-            navigate('/files');
-          } else {
-            setError('Registro exitoso. Por favor inicia sesión.');
-            navigate('/login');
-          }
-        } catch (loginErr) {
-          setError('Registro exitoso. Por favor inicia sesión manualmente.');
+      // First try fetch, fall back to XMLHttpRequest (igual que app.js)
+      try {
+        const response = await fetch(`${API_BASE_URL}/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            email: userData.email, 
+            username: userData.username, 
+            password: userData.password 
+          })
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Registration failed');
+        }
+        
+        // Registration successful
+        setError('Registration successful! Please log in.');
+        setTimeout(() => {
           navigate('/login');
-        }
-      } else {
-        setError('Registro completado con formato de respuesta inesperado. Intenta iniciar sesión.');
-        navigate('/login');
+        }, 2000);
+        
+      } catch (fetchError) {
+        console.warn('Fetch failed, trying XMLHttpRequest:', fetchError);
+        // Try with XMLHttpRequest as fallback
+        await registerUser();
+        
+        // Registration successful
+        setError('Registration successful! Please log in.');
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
       }
-    } catch (err) {
-      let errorMessage = 'Error durante el registro. Por favor intenta nuevamente.';
-      if (err.response?.data) {
-        const errorData = err.response.data;
-        if (Array.isArray(errorData) && errorData.length > 0) {
-          errorMessage = errorData.map(error => error.msg || error.message || String(error)).join(', ');
-        } else if (errorData.detail) {
-          if (typeof errorData.detail === 'string') {
-            errorMessage = errorData.detail;
-          } else if (Array.isArray(errorData.detail)) {
-            errorMessage = errorData.detail.map(error => error.msg || error.message || String(error)).join(', ');
-          } else {
-            errorMessage = String(errorData.detail);
-          }
-        } else if (errorData.message) {
-          errorMessage = String(errorData.message);
-        } else if (err.response.status === 400) {
-          errorMessage = 'Datos de registro inválidos. Verifica los campos.';
-        } else if (err.response.status === 409) {
-          errorMessage = 'El nombre de usuario o email ya está en uso.';
-        } else if (typeof errorData === 'object') {
-          errorMessage = 'Error en los datos de registro.';
-        } else if (typeof errorData === 'string') {
-          errorMessage = errorData;
-        }
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-      setError(errorMessage);
+      
+    } catch (error) {
+      console.error('Registration error:', error);
+      setError('Registration failed: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -122,12 +138,12 @@ const Register = ({ onLogin }) => {
               <h1 className="auth-title">Create An Account</h1>
               {error && (
                 <div className="mb-3" style={{
-                  background: 'rgba(255,0,0,0.08)',
-                  color: '#b91c1c',
+                  background: error.includes('successful') ? 'rgba(0,255,0,0.08)' : 'rgba(255,0,0,0.08)',
+                  color: error.includes('successful') ? '#16a34a' : '#b91c1c',
                   borderRadius: '12px',
                   padding: '12px 18px',
                   marginBottom: '1.5rem',
-                  border: '1px solid #fca5a5'
+                  border: error.includes('successful') ? '1px solid #86efac' : '1px solid #fca5a5'
                 }}>
                   {error}
                 </div>
