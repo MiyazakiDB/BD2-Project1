@@ -150,7 +150,15 @@ def get_audio_info(audio_path):
 
 def scan_audio_directories():
     """🔍 Escanear directorios de audio disponibles"""
-    base_dir = Path(__file__).parent.parent
+    base_dir = Path(__file__).resolve().parent.parent
+
+    
+    # DEBUG: Mostrar información de rutas
+    st.sidebar.write("🔍 **DEBUG - Información de rutas:**")
+    st.sidebar.write(f"📁 Archivo actual: `{Path(__file__)}`")
+    st.sidebar.write(f"📁 Directorio base: `{base_dir}`")
+    st.sidebar.write(f"📁 Directorio base absoluto: `{base_dir.absolute()}`")
+    st.sidebar.markdown("---")
     
     audio_dirs = {
         "previews": base_dir / "previews",
@@ -159,16 +167,55 @@ def scan_audio_directories():
     }
     
     available_dirs = {}
+    
+    # DEBUG: Verificar cada directorio
+    st.sidebar.write("🔍 **DEBUG - Verificación de directorios:**")
     for name, path in audio_dirs.items():
+        st.sidebar.write(f"📂 **{name}:**")
+        st.sidebar.write(f"   Ruta: `{path}`")
+        st.sidebar.write(f"   Absoluta: `{path.absolute()}`")
+        st.sidebar.write(f"   Existe: {path.exists()}")
+        
         if path.exists():
-            audio_files = list(path.glob("*.wav")) + list(path.glob("*.mp3")) + \
-                         list(path.glob("*.flac")) + list(path.glob("*.m4a"))
-            if audio_files:
+            # Buscar archivos de audio
+            wav_files = list(path.glob("*.wav"))
+            mp3_files = list(path.glob("*.mp3"))
+            flac_files = list(path.glob("*.flac"))
+            m4a_files = list(path.glob("*.m4a"))
+            
+            all_audio_files = wav_files + mp3_files + flac_files + m4a_files
+            
+            st.sidebar.write(f"   WAV: {len(wav_files)} archivos")
+            st.sidebar.write(f"   MP3: {len(mp3_files)} archivos")
+            st.sidebar.write(f"   FLAC: {len(flac_files)} archivos")
+            st.sidebar.write(f"   M4A: {len(m4a_files)} archivos")
+            st.sidebar.write(f"   **Total: {len(all_audio_files)} archivos**")
+            
+            # Mostrar algunos nombres de archivos si existen
+            if all_audio_files:
+                st.sidebar.write("   Ejemplos:")
+                for i, file in enumerate(all_audio_files[:3]):  # Mostrar solo los primeros 3
+                    st.sidebar.write(f"   - {file.name}")
+                if len(all_audio_files) > 3:
+                    st.sidebar.write(f"   - ... y {len(all_audio_files) - 3} más")
+                
                 available_dirs[name] = {
                     "path": path,
-                    "files": [f.name for f in audio_files],
-                    "count": len(audio_files)
+                    "files": [f.name for f in all_audio_files],
+                    "count": len(all_audio_files)
                 }
+            else:
+                st.sidebar.write("   ❌ No se encontraron archivos de audio")
+        else:
+            st.sidebar.write("   ❌ El directorio no existe")
+        
+        st.sidebar.write("---")
+    
+    # DEBUG: Resultado final
+    st.sidebar.write("🎯 **DEBUG - Resultado final:**")
+    st.sidebar.write(f"Directorios disponibles: {len(available_dirs)}")
+    for name, info in available_dirs.items():
+        st.sidebar.write(f"- {name}: {info['count']} archivos")
     
     return available_dirs
 
@@ -218,14 +265,47 @@ def main():
     # Escanear directorios disponibles
     audio_dirs = scan_audio_directories()
     
+    # DEBUG: Mostrar resultado del escaneo
+    st.write("🔍 **DEBUG - Resultado del escaneo:**")
+    if audio_dirs:
+        st.success(f"✅ Se encontraron {len(audio_dirs)} directorios con archivos de audio")
+        for name, info in audio_dirs.items():
+            st.write(f"- **{name}**: {info['count']} archivos en `{info['path']}`")
+    else:
+        st.error("❌ No se encontraron directorios con archivos de audio")
+        st.write("**Posibles causas:**")
+        st.write("1. Los directorios no existen")
+        st.write("2. Los directorios existen pero están vacíos") 
+        st.write("3. Los archivos no tienen las extensiones esperadas (.wav, .mp3, .flac, .m4a)")
+        st.write("4. Problema con las rutas relativas")
+    
     if not audio_dirs:
         # Si no se detectan audios en previews o audio_to_see, mostrar rutas donde agregar archivos
-        base_dir = Path(__file__).parent.parent
+        base_dir = Path(__file__).parent  # CORRECCIÓN: mismo nivel que VIsualizers
         dir1 = base_dir / "previews"
         dir2 = base_dir / "audio_to_see"
         st.warning("❌ No se encontraron archivos de audio en las carpetas configuradas.")
         st.info("💡 Coloca archivos de audio en alguna de estas rutas:")
         st.code(f"{dir1}\n{dir2}")
+        
+        # Botón para crear directorios si no existen
+        if st.button("🛠️ Crear directorios faltantes"):
+            created = []
+            for name, path in [("previews", dir1), ("audio_to_see", dir2)]:
+                if not path.exists():
+                    try:
+                        path.mkdir(parents=True, exist_ok=True)
+                        created.append(name)
+                        st.success(f"✅ Directorio '{name}' creado en: {path}")
+                    except Exception as e:
+                        st.error(f"❌ Error creando directorio '{name}': {e}")
+                else:
+                    st.info(f"ℹ️ Directorio '{name}' ya existe")
+            
+            if created:
+                st.success("🎉 ¡Directorios creados! Ahora coloca tus archivos de audio en ellos y recarga la página.")
+                st.experimental_rerun()
+        
         st.info("También puedes subir un archivo manualmente a continuación:")
         uploaded_file = st.file_uploader("Sube un archivo de audio", type=["wav","mp3","flac","m4a"])
         if uploaded_file is not None:
@@ -315,9 +395,9 @@ def single_audio_analysis(audio_dirs):
             [
                 "🔊 Forma de Onda", 
                 "🎵 Forma de Onda Interactiva", 
-                "� Forma de Onda con Marcadores",
+                " Forma de Onda con Marcadores",
                 "📊 Forma de Onda por Segmentos",
-                "�🎛️ Espectrograma", 
+                "🎛️ Espectrograma",
                 "🎚️ Mel-Spectrograma", 
                 "🎶 MFCC"
             ],
@@ -335,7 +415,7 @@ def single_audio_analysis(audio_dirs):
                         st.pyplot(fig)
                         plt.close()
                         
-                    elif viz == "� Forma de Onda Interactiva":
+                    elif viz == " Forma de Onda Interactiva":
                         st.subheader("🎵 Forma de Onda Interactiva")
                         fig, stats = plot_interactive_waveform(str(audio_path), f"Forma de Onda Interactiva - {selected_file}")
                         st.pyplot(fig)
@@ -372,7 +452,7 @@ def single_audio_analysis(audio_dirs):
                         st.pyplot(fig)
                         plt.close()
                         
-                    elif viz == "�🎛️ Espectrograma":
+                    elif viz == "🎛️ Espectrograma":
                         st.subheader("🎛️ Espectrograma")
                         fig = plot_spectrogram(str(audio_path), f"Espectrograma - {selected_file}")
                         st.pyplot(fig)
