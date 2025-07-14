@@ -7,14 +7,30 @@ import os
 import pandas as pd
 from pathlib import Path
 import time
+import tempfile
 
-# Configuración de la página
+# === CONFIGURACIÓN INICIAL DE STREAMLIT ===
 st.set_page_config(
     page_title="🎵 Audio Visualizer & Comparator",
     page_icon="🎧",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': 'https://github.com/MiyazakiDB/BD2-Project1',
+        'Report a bug': None,
+        'About': "# 🎵 Audio Visualizer & Comparator\nAnálisis temporal y comparación de audios con MFCC y espectrogramas.\n\nDesarrollado para BD2-Project1"
+    }
 )
+
+# Configuración de matplotlib para Streamlit
+plt.style.use('default')
+plt.rcParams['figure.facecolor'] = 'white'
+plt.rcParams['axes.facecolor'] = 'white'
+
+# Ocultar warning de deprecated functions
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # === FUNCIONES DE VISUALIZACIÓN ===
 
@@ -156,20 +172,61 @@ def scan_audio_directories():
     
     return available_dirs
 
+# === INICIALIZACIÓN DE STREAMLIT ===
+
+def init_streamlit():
+    """Inicializar estado de la sesión de Streamlit"""
+    # Inicializar variables de estado si no existen
+    if 'audio_loaded' not in st.session_state:
+        st.session_state.audio_loaded = False
+    
+    if 'current_audio_path' not in st.session_state:
+        st.session_state.current_audio_path = None
+    
+    if 'analysis_mode' not in st.session_state:
+        st.session_state.analysis_mode = "🔍 Análisis Individual"
+    
+    if 'show_advanced' not in st.session_state:
+        st.session_state.show_advanced = False
+
 # === INTERFAZ STREAMLIT ===
 
 def main():
+    # Inicializar Streamlit
+    init_streamlit()
+    
+    # Header principal
     st.title("🎵 Audio Visualizer & Comparator")
     st.markdown("### Análisis temporal y comparación de audios")
     
+    # Mostrar información del sistema
+    with st.expander("ℹ️ Información del Sistema", expanded=False):
+        st.markdown("""
+        **🎯 Funciones disponibles:**
+        - 🔍 Análisis individual de audios
+        - ⚖️ Comparación lado a lado
+        - 🎵 Visualizador interactivo con navegación temporal
+        - 📊 Múltiples tipos de visualización (Waveform, Spectrograma, MFCC, etc.)
+        
+        **📁 Formatos soportados:** WAV, MP3, FLAC, M4A
+        """)
+    
     # Sidebar para configuración
     st.sidebar.header("⚙️ Configuración")
+    st.sidebar.markdown("---")
     
     # Escanear directorios disponibles
     audio_dirs = scan_audio_directories()
     
     if not audio_dirs:
-        st.warning("❌ No se encontraron directorios con archivos de audio. Puedes subir un archivo manualmente:")
+        # Si no se detectan audios en previews o audio_to_see, mostrar rutas donde agregar archivos
+        base_dir = Path(__file__).parent.parent
+        dir1 = base_dir / "previews"
+        dir2 = base_dir / "audio_to_see"
+        st.warning("❌ No se encontraron archivos de audio en las carpetas configuradas.")
+        st.info("💡 Coloca archivos de audio en alguna de estas rutas:")
+        st.code(f"{dir1}\n{dir2}")
+        st.info("También puedes subir un archivo manualmente a continuación:")
         uploaded_file = st.file_uploader("Sube un archivo de audio", type=["wav","mp3","flac","m4a"])
         if uploaded_file is not None:
             # Guardar archivo temporal para análisis
@@ -255,7 +312,15 @@ def single_audio_analysis(audio_dirs):
         
         viz_options = st.multiselect(
             "Selecciona las visualizaciones que quieres ver:",
-            ["🔊 Forma de Onda", "🎛️ Espectrograma", "🎚️ Mel-Spectrograma", "🎶 MFCC"],
+            [
+                "🔊 Forma de Onda", 
+                "🎵 Forma de Onda Interactiva", 
+                "� Forma de Onda con Marcadores",
+                "📊 Forma de Onda por Segmentos",
+                "�🎛️ Espectrograma", 
+                "🎚️ Mel-Spectrograma", 
+                "🎶 MFCC"
+            ],
             default=["🔊 Forma de Onda", "🎛️ Espectrograma"]
         )
         
@@ -270,7 +335,44 @@ def single_audio_analysis(audio_dirs):
                         st.pyplot(fig)
                         plt.close()
                         
-                    elif viz == "🎛️ Espectrograma":
+                    elif viz == "� Forma de Onda Interactiva":
+                        st.subheader("🎵 Forma de Onda Interactiva")
+                        fig, stats = plot_interactive_waveform(str(audio_path), f"Forma de Onda Interactiva - {selected_file}")
+                        st.pyplot(fig)
+                        plt.close()
+                        
+                        # Mostrar estadísticas del segmento
+                        st.info("📊 **Estadísticas del segmento:**")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Duración", f"{stats['segment_duration']:.2f}s")
+                            st.metric("Máx. Amplitud", f"{stats['max_amplitude']:.3f}")
+                        with col2:
+                            st.metric("Mín. Amplitud", f"{stats['min_amplitude']:.3f}")
+                            st.metric("Media", f"{stats['mean_amplitude']:.3f}")
+                        with col3:
+                            st.metric("RMS", f"{stats['rms']:.3f}")
+                            st.metric("Muestras", stats['samples_shown'])
+                        
+                    elif viz == "🎯 Forma de Onda con Marcadores":
+                        st.subheader("🎯 Forma de Onda con Marcadores de Tiempo")
+                        fig = plot_waveform_with_markers(str(audio_path), f"Forma de Onda con Marcadores - {selected_file}")
+                        st.pyplot(fig)
+                        plt.close()
+                        
+                    elif viz == "📊 Forma de Onda por Segmentos":
+                        st.subheader("📊 Forma de Onda por Segmentos")
+                        segment_duration = st.selectbox(
+                            "Duración de cada segmento (segundos):",
+                            [2, 5, 10, 15, 30],
+                            index=1,
+                            key="segment_duration"
+                        )
+                        fig = plot_waveform_segments(str(audio_path), segment_duration, f"Segmentos - {selected_file}")
+                        st.pyplot(fig)
+                        plt.close()
+                        
+                    elif viz == "�🎛️ Espectrograma":
                         st.subheader("🎛️ Espectrograma")
                         fig = plot_spectrogram(str(audio_path), f"Espectrograma - {selected_file}")
                         st.pyplot(fig)
@@ -376,7 +478,152 @@ def audio_comparison(audio_dirs):
                 
                 st.success("✅ ¡Comparación completada!")
 
-# === PÁGINA PRINCIPAL ===
+def plot_interactive_waveform(audio_path, title="Forma de Onda Interactiva"):
+    """🎵 Visualizador interactivo de forma de onda con navegación temporal"""
+    y, sr = librosa.load(audio_path, sr=None)
+    duration = librosa.get_duration(y=y, sr=sr)
+    
+    # Crear controles de tiempo
+    st.subheader("🎛️ Control de Tiempo")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        start_time = st.slider(
+            "⏪ Tiempo inicio (segundos)", 
+            0.0, 
+            max(0.0, duration - 1.0), 
+            0.0, 
+            step=0.1,
+            key="start_time"
+        )
+    
+    with col2:
+        window_size = st.selectbox(
+            "⏳ Ventana de tiempo",
+            [1, 2, 5, 10, 15, 30],
+            index=2,
+            key="window_size"
+        )
+    
+    with col3:
+        zoom_level = st.selectbox(
+            "🔍 Nivel de zoom",
+            ["Normal", "2x", "4x", "8x"],
+            index=0,
+            key="zoom_level"
+        )
+    
+    # Calcular ventana de tiempo
+    end_time = min(start_time + window_size, duration)
+    start_sample = int(start_time * sr)
+    end_sample = int(end_time * sr)
+    
+    # Extraer segmento de audio
+    y_segment = y[start_sample:end_sample]
+    time_axis = np.linspace(start_time, end_time, len(y_segment))
+    
+    # Aplicar zoom
+    zoom_factor = {"Normal": 1, "2x": 2, "4x": 4, "8x": 8}[zoom_level]
+    if zoom_factor > 1:
+        zoom_samples = len(y_segment) // zoom_factor
+        mid_point = len(y_segment) // 2
+        zoom_start = max(0, mid_point - zoom_samples // 2)
+        zoom_end = min(len(y_segment), mid_point + zoom_samples // 2)
+        y_segment = y_segment[zoom_start:zoom_end]
+        time_axis = time_axis[zoom_start:zoom_end]
+    
+    # Crear el gráfico
+    fig, ax = plt.subplots(figsize=(15, 6))
+    ax.plot(time_axis, y_segment, linewidth=0.5, alpha=0.8)
+    ax.set_xlabel('Tiempo (segundos)')
+    ax.set_ylabel('Amplitud')
+    ax.set_title(f'{title} - {start_time:.1f}s a {end_time:.1f}s (Zoom: {zoom_level})')
+    ax.grid(True, alpha=0.3)
+    
+    # Estadísticas del segmento
+    ax.axhline(y=np.max(y_segment), color='red', linestyle='--', alpha=0.7, label=f'Máx: {np.max(y_segment):.3f}')
+    ax.axhline(y=np.min(y_segment), color='blue', linestyle='--', alpha=0.7, label=f'Mín: {np.min(y_segment):.3f}')
+    ax.axhline(y=np.mean(y_segment), color='green', linestyle='--', alpha=0.7, label=f'Media: {np.mean(y_segment):.3f}')
+    ax.legend()
+    
+    plt.tight_layout()
+    return fig, {
+        "segment_duration": end_time - start_time,
+        "max_amplitude": np.max(y_segment),
+        "min_amplitude": np.min(y_segment),
+        "mean_amplitude": np.mean(y_segment),
+        "rms": np.sqrt(np.mean(y_segment**2)),
+        "samples_shown": len(y_segment)
+    }
 
+def plot_waveform_with_markers(audio_path, title="Forma de Onda con Marcadores"):
+    """🎯 Visualizador de forma de onda con marcadores de tiempo cada segundo"""
+    y, sr = librosa.load(audio_path, sr=None)
+    duration = librosa.get_duration(y=y, sr=sr)
+    time_axis = np.linspace(0, duration, len(y))
+    
+    fig, ax = plt.subplots(figsize=(15, 6))
+    ax.plot(time_axis, y, linewidth=0.3, alpha=0.8, color='blue')
+    
+    # Agregar marcadores cada segundo
+    for second in range(int(duration) + 1):
+        ax.axvline(x=second, color='red', linestyle='--', alpha=0.5, linewidth=1)
+        ax.text(second, ax.get_ylim()[1] * 0.9, f'{second}s', 
+                rotation=90, fontsize=8, alpha=0.7)
+    
+    # Marcadores cada 10 segundos más prominentes
+    for ten_sec in range(0, int(duration) + 1, 10):
+        ax.axvline(x=ten_sec, color='darkred', linestyle='-', alpha=0.8, linewidth=2)
+        ax.text(ten_sec, ax.get_ylim()[1] * 0.95, f'{ten_sec}s', 
+                rotation=0, fontsize=10, fontweight='bold', alpha=0.9)
+    
+    ax.set_xlabel('Tiempo (segundos)')
+    ax.set_ylabel('Amplitud')
+    ax.set_title(f'{title} - Duración total: {duration:.2f}s')
+    ax.grid(True, alpha=0.2)
+    
+    plt.tight_layout()
+    return fig
+
+def plot_waveform_segments(audio_path, segment_duration=5, title="Forma de Onda por Segmentos"):
+    """📊 Visualizador que divide la canción en segmentos de tiempo específico"""
+    y, sr = librosa.load(audio_path, sr=None)
+    duration = librosa.get_duration(y=y, sr=sr)
+    
+    # Calcular número de segmentos
+    num_segments = int(np.ceil(duration / segment_duration))
+    
+    # Crear subplots
+    fig, axes = plt.subplots(num_segments, 1, figsize=(15, 3 * num_segments))
+    if num_segments == 1:
+        axes = [axes]
+    
+    for i in range(num_segments):
+        start_time = i * segment_duration
+        end_time = min((i + 1) * segment_duration, duration)
+        
+        start_sample = int(start_time * sr)
+        end_sample = int(end_time * sr)
+        
+        y_segment = y[start_sample:end_sample]
+        time_axis = np.linspace(start_time, end_time, len(y_segment))
+        
+        axes[i].plot(time_axis, y_segment, linewidth=0.5)
+        axes[i].set_title(f'Segmento {i+1}: {start_time:.1f}s - {end_time:.1f}s')
+        axes[i].set_xlabel('Tiempo (segundos)')
+        axes[i].set_ylabel('Amplitud')
+        axes[i].grid(True, alpha=0.3)
+        
+        # Estadísticas del segmento
+        rms = np.sqrt(np.mean(y_segment**2))
+        axes[i].text(0.02, 0.95, f'RMS: {rms:.3f}', transform=axes[i].transAxes, 
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.7))
+    
+    plt.tight_layout()
+    return fig
+
+# === PUNTO DE ENTRADA PRINCIPAL ===
 if __name__ == "__main__":
     main()
+
