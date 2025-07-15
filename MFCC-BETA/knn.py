@@ -2,161 +2,131 @@ import os
 import numpy as np
 import pandas as pd
 import joblib
-import heapq
 from scipy.spatial.distance import cdist
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import normalize
+from pathlib import Path
 from mfccFunction import extract_mfcc_from_file
 
 # === CONFIGURACIÓN ===
-model_dir = os.path.join(os.path.dirname(__file__), "modelK")
-CODEBOOK_PATH = os.path.join(model_dir, "acoustic_codebook.pkl")
-TFIDF_CSV_PATH = os.path.join(model_dir, "audio_histograms_tfidf.csv")
-
+model_dir = Path(__file__).parent / "modelK"
+CODEBOOK_PATH = model_dir / "acoustic_codebook.pkl"
+TFIDF_CSV_PATH = model_dir / "audio_histograms_tfidf_normalized.csv"
 
 class AudioSimilaritySearcher:
     def __init__(self):
         """Inicializa el buscador cargando el codebook y los histogramas TF-IDF"""
-        print("Cargando codebook...")
+        self._load_codebook()
+        self._load_tfidf_data()
+        self._estimate_idf_from_tfidf()
+    
+    def _load_codebook(self):
+        """Carga el modelo K-means entrenado"""
+        if not CODEBOOK_PATH.exists():
+            raise FileNotFoundError(f"Codebook no encontrado: {CODEBOOK_PATH}")
+        
         self.kmeans = joblib.load(CODEBOOK_PATH)
         self.n_clusters = self.kmeans.n_clusters
+    
+    def _load_tfidf_data(self):
+        """Carga los vectores TF-IDF de la base de datos"""
+        if not TFIDF_CSV_PATH.exists():
+            raise FileNotFoundError(f"Archivo TF-IDF no encontrado: {TFIDF_CSV_PATH}")
         
-        print("Cargando histogramas TF-IDF...")
         self.df_tfidf = pd.read_csv(TFIDF_CSV_PATH)
         self.filenames = self.df_tfidf['filename'].values
         self.tfidf_vectors = self.df_tfidf.drop('filename', axis=1).values
-        
-        # Calcular estadísticas IDF del dataset para nuevos audios
-        self._calculate_idf_stats()
-        
-        print(f"Sistema listo - {len(self.filenames)} audios en la base de datos")
     
-    def _calculate_idf_stats(self):
-        """Calcula estadísticas IDF para aplicar a nuevos audios"""
-        # Convertir TF-IDF de vuelta a histogramas raw para obtener IDF
-        self.n_docs = len(self.tfidf_vectors)
-        
-      
-        non_zero_counts = np.count_nonzero(self.tfidf_vectors > 0, axis=0)
-        self.idf_vector = np.log(self.n_docs / np.maximum(non_zero_counts, 1))
+    def _estimate_idf_from_tfidf(self):
+        """Estima el vector IDF desde los datos TF-IDF existentes"""
+        doc_frequencies = np.count_nonzero(self.tfidf_vectors > 0, axis=0)
+        n_docs = len(self.tfidf_vectors)
+        self.idf_vector = np.log(n_docs / np.maximum(doc_frequencies, 1))
     
     def get_histogram_from_mfcc(self, mfcc):
         """
-        Convierte MFCC a histograma usando tu lógica exacta de HistogramaBuilder
+        Convierte MFCC a histograma usando la misma lógica del entrenamiento
         """
         if mfcc.shape[0] == 0:
-            return np.zeros(self.n_clusters)
+            return np.zeros(self.n_clusters, dtype=np.float64)
         
-        #  lógica exacta del HistogramaBuilder
         distances = cdist(mfcc, self.kmeans.cluster_centers_, metric='euclidean')
         cluster_ids = np.argmin(distances, axis=1)
         hist, _ = np.histogram(cluster_ids, bins=np.arange(self.n_clusters + 1))
         
-        return hist
+        return hist.astype(np.float64)
     
     def audio_to_tfidf_vector(self, audio_path):
         """
-        Convierte un archivo de audio a vector TF-IDF usando tu proceso exacto
+        Convierte un archivo de audio a vector TF-IDF normalizado
         """
-        print(f"Extrayendo MFCC de: {os.path.basename(audio_path)}")
-        
-        # Usar  función de extracción MFCC
         mfcc = extract_mfcc_from_file(audio_path)
         
         if mfcc.shape[0] == 0:
-            print("Error: No se pudo extraer MFCC del audio")
             return None
         
-        # Obtener histograma usando tu función exacta
         audio_histogram = self.get_histogram_from_mfcc(mfcc)
         
-        # === CALCULAR TF  ===
-        nd = np.sum(audio_histogram)  # suma del histograma
+        # === CALCULAR TF ===
+        nd = np.sum(audio_histogram)
         if nd > 0:
-            tf = audio_histogram / nd  # TF = n_i,d / n_d
+            tf = audio_histogram / nd
         else:
             tf = audio_histogram.astype(np.float64)
         
-        # === APLICAR TF-IDF  ===
+        # === APLICAR TF-IDF ===
         tf_idf = tf * self.idf_vector
         
-        return tf_idf
+        # === NORMALIZACIÓN L2 ===
+        tf_idf_normalized = normalize([tf_idf], norm='l2')[0]
+        
+        return tf_idf_normalized
     
-    def find_similar_audios(self, query_audio_path, top_k=None):
+    def find_similar_audios(self, query_audio_path, top_k=None, similarity_threshold=0.0):
         """
         Encuentra audios similares usando similitud coseno
-        
-        Args:
-            query_audio_path: Ruta del audio de consulta
-            top_k: Número de resultados a retornar (None = todos)
-        
-        Returns:
-            Lista de tuplas (filename, similarity_score) ordenada por similitud
         """
-        # Convertir audio query a vector TF-IDF
         query_vector = self.audio_to_tfidf_vector(query_audio_path)
         
         if query_vector is None:
             return []
         
-        print("Calculando similitudes coseno...")
-        
-        # Calcular similitud coseno con todos los audios en la base de datos
         similarities = cosine_similarity([query_vector], self.tfidf_vectors)[0]
         
-        # Crear max-heap usando similaridades negativas (porque heapq es min-heap)
-        heap = []
-        for i, similarity in enumerate(similarities):
-            # Usar similaridad negativa para simular max-heap
-            heapq.heappush(heap, (-similarity, self.filenames[i], similarity))
-        
-        # Extraer resultados ordenados por similitud (mayor a menor)
         results = []
-        total_results = len(heap) if top_k is None else min(top_k, len(heap))
+        for i, similarity in enumerate(similarities):
+            if similarity >= similarity_threshold:
+                results.append((self.filenames[i], similarity))
         
-        for _ in range(total_results):
-            if heap:
-                neg_sim, filename, similarity = heapq.heappop(heap)
-                results.append((filename, similarity))
+        results.sort(key=lambda x: x[1], reverse=True)
+        
+        if top_k is not None:
+            results = results[:top_k]
         
         return results
 
-def search_similar_audios(query_audio_path, top_k=None):
+def search_similar_audios(query_audio_path, top_k=None, similarity_threshold=0.0):
     """
     Función helper para búsqueda de audios similares
-    
-    Args:
-        query_audio_path: Ruta del audio de consulta
-        top_k: Número de resultados a retornar (None = todos)
-    
-    Returns:
-        Lista de tuplas (filename, similarity_score)
     """
     searcher = AudioSimilaritySearcher()
-    return searcher.find_similar_audios(query_audio_path, top_k)
+    return searcher.find_similar_audios(query_audio_path, top_k, similarity_threshold)
 
 # === EJEMPLO DE USO ===
 if __name__ == "__main__":
-    # Ejemplo de uso
-    query_path = os.path.join(os.path.dirname(__file__), "audio_to_see", "The_Strokes_-_Reptilia.wav")
+    query_path = Path(__file__).parent / "audio_to_see" / "STROKESPRUEBA.mp3"
     
-    # Buscar los 10 audios más similares
-    resultados = search_similar_audios(query_path, top_k=10)
+    if not query_path.exists():
+        print(f"Error: Archivo no encontrado - {query_path}")
+        exit(1)
     
-    print(f"\nAudios más similares a {os.path.basename(query_path)}:")
-    print("-" * 70)
-    
-    for i, (filename, similarity) in enumerate(resultados, 1):
-        print(f"{i:2d}. {filename:<50} | Similitud: {similarity:.4f}")
-    
-    # Buscar todos los audios similares
-    print(f"\n--- Estadísticas generales ---")
-    todos_resultados = search_similar_audios(query_path)
-    print(f"Total de audios comparados: {len(todos_resultados)}")
-    
-    if todos_resultados:
-        max_sim = max(sim for _, sim in todos_resultados)
-        min_sim = min(sim for _, sim in todos_resultados)
-        avg_sim = np.mean([sim for _, sim in todos_resultados])
-        print(f"Similitud máxima: {max_sim:.4f}")
-        print(f"Similitud mínima: {min_sim:.4f}")
-        print(f"Similitud promedio: {avg_sim:.4f}")
+    try:
+        searcher = AudioSimilaritySearcher()
+        
+        resultados = searcher.find_similar_audios(query_path, top_k=10, similarity_threshold=0.0)
+        
+        for i, (filename, similarity) in enumerate(resultados, 1):
+            print(f"{i:2d}. {filename:<50} | Similitud: {similarity:.4f}")
+        
+    except Exception as e:
+        print(f"Error: {e}")
