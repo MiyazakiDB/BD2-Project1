@@ -41,3 +41,4 @@ typing-inspection==0.4.1
 typing_extensions==4.13.2
 tzdata==2025.2
 uvicorn==0.24.0
+soundfile==0.12.1

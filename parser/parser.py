@@ -969,7 +969,7 @@ def print_sql(sql: str):
         print(printer.print(sql_parse))
     except RuntimeError as e:
         return None, str(e)
-
+# <->
 def select_with_multimedia_similarity(table_schema, similarity_condition, limit=None):
     """
     Realizar una búsqueda por similitud multimedia
