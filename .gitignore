@@ -89,3 +89,4 @@ backend/users.db
 
 # Ignore the mnist_dataset directory
 mnist_dataset/
+previews_dataset/

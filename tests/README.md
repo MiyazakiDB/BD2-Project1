@@ -5,7 +5,7 @@ Este directorio contiene pruebas y demostraciones para la funcionalidad de búsq
 ## Estructura de archivos
 
 - `mnist_test.py`: Prueba simple con un imagen MNIST comparada con otras del mismo dataset para la funcionalidad básica de multimedia
-
+- `audio_test.py`: Prueba de com
 ## Requisitos
 
 Asegúrate de tener instaladas todas las dependencias:
