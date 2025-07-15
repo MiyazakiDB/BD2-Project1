@@ -11,3 +11,7 @@ def extract_mfcc_from_file(file_path):
     except Exception as e:
         print(f"Error procesando {file_path}: {e}")
         return np.empty((0, n_mfcc))
+
+
+
+

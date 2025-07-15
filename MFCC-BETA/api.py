@@ -45,11 +45,11 @@ async def lifespan(app: FastAPI):
     # Startup
     global searcher
     try:
-        print("🚀 Inicializando sistema de búsqueda...")
+        print(" ! Inicializando sistema de búsqueda...")
         searcher = AudioSimilaritySearcher()
-        print("✅ Sistema inicializado correctamente")
+        print(" *-* Sistema inicializado correctamente")
     except Exception as e:
-        print(f"❌ Error al inicializar: {e}")
+        print(f" ! Error al inicializar: {e}")
         raise
     
     yield
