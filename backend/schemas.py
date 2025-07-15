@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 
 # User schemas
@@ -45,6 +45,11 @@ class File(FileBase):
     class Config:
         orm_mode = True
 
+# Multimedia File schema
+class MultimediaFile(File):
+    file_path: str
+    file_type: str  # "image" or "audio"
+
 # Table schemas
 class TableBase(BaseModel):
     name: str
@@ -71,6 +76,20 @@ class QueryResult(BaseModel):
     total: int
     message: str
     execution_time: float
+
+# Multimedia query schemas
+class MultimediaQueryRequest(BaseModel):
+    query_file_id: int
+    target_table: str
+    column_name: str
+    limit: int = 10
+    method: str = "inverted"  # "sequential" or "inverted"
+
+class MultimediaQueryResult(BaseModel):
+    data: Dict[str, Any]
+    total: int
+    execution_time: float
+    query_file: str
 
 # Dashboard schemas
 class Dashboard(BaseModel):

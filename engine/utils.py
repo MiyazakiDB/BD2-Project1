@@ -140,3 +140,8 @@ def get_record_file_path(table_name: str) -> str:
 def get_index_file_path(table_name: str, column_name: str, index_type: IndexType) -> str:
     index_name = index_type.name.lower()
     return get_table_file_path(table_name, f"{table_name}_{column_name}_{index_name}.dat")
+
+# Function to get the tables directory
+def get_tables_dir() -> str:
+    """Get the path to the tables directory"""
+    return f"{os.path.dirname(__file__)}/../tables"
