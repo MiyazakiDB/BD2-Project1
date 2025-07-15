@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Nav, Button } from 'react-bootstrap';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Home, Search, Settings, BarChart3, Upload, Database } from 'lucide-react';
+import { Menu, X, Home, Search, Settings, BarChart3, Upload, Database, FileText } from 'lucide-react';
 import logo from '../../assets/logo.svg';
 import './Sidebar.css';
 
@@ -19,6 +19,7 @@ const Sidebar = ({ onLogout }) => {
     { name: 'Files', icon: Upload, path: '/files' },
     { name: 'Tables', icon: Database, path: '/tables' },
     { name: 'Query Executor', icon: Search, path: '/query' },
+    { name: 'Text Search', icon: FileText, path: '/text-search' },
     { name: 'Metrics', icon: BarChart3, path: '/metrics' }
   ];
 

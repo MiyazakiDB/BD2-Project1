@@ -11,4 +11,16 @@ module.exports = function(app) {
       },
     })
   );
+  
+  // Proxy for text search API
+  app.use(
+    '/text-api',
+    createProxyMiddleware({
+      target: 'http://localhost:8001',
+      changeOrigin: true,
+      pathRewrite: {
+        '^/text-api': '', // rewrite path
+      },
+    })
+  );
 };
