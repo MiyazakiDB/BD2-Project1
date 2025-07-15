@@ -46,7 +46,7 @@ class AudioSimilaritySearcher:
         if mfcc.shape[0] == 0:
             return np.zeros(self.n_clusters)
         
-        # Tu lógica exacta del HistogramaBuilder
+        #  lógica exacta del HistogramaBuilder
         distances = cdist(mfcc, self.kmeans.cluster_centers_, metric='euclidean')
         cluster_ids = np.argmin(distances, axis=1)
         hist, _ = np.histogram(cluster_ids, bins=np.arange(self.n_clusters + 1))
@@ -59,7 +59,7 @@ class AudioSimilaritySearcher:
         """
         print(f"Extrayendo MFCC de: {os.path.basename(audio_path)}")
         
-        # Usar tu función de extracción MFCC
+        # Usar  función de extracción MFCC
         mfcc = extract_mfcc_from_file(audio_path)
         
         if mfcc.shape[0] == 0:
@@ -76,7 +76,7 @@ class AudioSimilaritySearcher:
         else:
             tf = audio_histogram.astype(np.float64)
         
-        # === APLICAR TF-IDF (tu lógica exacta) ===
+        # === APLICAR TF-IDF  ===
         tf_idf = tf * self.idf_vector
         
         return tf_idf
