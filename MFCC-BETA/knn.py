@@ -114,7 +114,7 @@ def search_similar_audios(query_audio_path, top_k=None, similarity_threshold=0.0
 
 # === EJEMPLO DE USO ===
 if __name__ == "__main__":
-    query_path = Path(__file__).parent / "audio_to_see" / "STROKESPRUEBA.mp3"
+    query_path = Path(__file__).parent / "audio_to_see" / "Tainy, Bad Bunny - MOJABI GHOST.mp3"
     
     if not query_path.exists():
         print(f"Error: Archivo no encontrado - {query_path}")
