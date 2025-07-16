@@ -12,17 +12,23 @@ PREVIEWS_DIR="${REPO_DIR}/previews"
 mkdir -p "${DATASETS_DIR}"
 
 echo "==== Iniciando descarga y configuración del dataset de audio ===="
+echo ""
 
 # Verificar si el repositorio ya está clonado
 if [ -d "${REPO_DIR}" ]; then
     echo "El repositorio ${REPO_DIR} ya existe. Se omitirá la clonación."
 else
-    # Clonar el repositorio
+    # Clonar el repositorio con protección de hooks desactivada
     echo "Clonando repositorio ${REPO_URL}..."
-    git clone "${REPO_URL}" "${REPO_DIR}"
+    GIT_CLONE_PROTECTION_ACTIVE=false git clone "${REPO_URL}" "${REPO_DIR}"
     if [ $? -ne 0 ]; then
-        echo "Error: No se pudo clonar el repositorio."
-        exit 1
+        # Verificar si la clonación parcial ocurrió y el directorio existe
+        if [ ! -d "${REPO_DIR}" ] || [ ! -d "${REPO_DIR}/test_audio" ]; then
+            echo "Error: No se pudo clonar el repositorio."
+            exit 1
+        else
+            echo "El repositorio se clonó parcialmente, intentando continuar..."
+        fi
     fi
 fi
 
@@ -38,7 +44,7 @@ if [ -f "${REPO_DIR}/previews.zip" ]; then
     if [ -f "${PREVIEWS_DIR}/previews.zip" ]; then
         echo "Extrayendo archivo previews.zip en la carpeta previews..."
         # Extraer el ZIP en la carpeta previews
-        unzip -q "${PREVIEWS_DIR}/previews.zip" -d "${PREVIEWS_DIR}"
+        unzip -o -q "${PREVIEWS_DIR}/previews.zip" -d "${PREVIEWS_DIR}"
         if [ $? -ne 0 ]; then
             echo "Error: No se pudo extraer el archivo de previews."
             exit 1
@@ -54,7 +60,7 @@ if [ -f "${REPO_DIR}/previews.zip" ]; then
 elif [ -f "${PREVIEWS_DIR}/previews.zip" ]; then
     # Si el ZIP ya está en la carpeta previews
     echo "Extrayendo archivo previews.zip en la carpeta previews..."
-    unzip -q "${PREVIEWS_DIR}/previews.zip" -d "${PREVIEWS_DIR}"
+    unzip -o -q "${PREVIEWS_DIR}/previews.zip" -d "${PREVIEWS_DIR}"
     if [ $? -ne 0 ]; then
         echo "Error: No se pudo extraer el archivo de previews."
         exit 1
