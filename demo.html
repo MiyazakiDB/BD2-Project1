@@ -120,6 +120,31 @@
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        
+        .document-item:hover {
+            background-color: #f8f9fa;
+            transition: background-color 0.2s ease;
+        }
+        
+        .document-item a:hover {
+            color: #495057 !important;
+        }
+        
+        .table th {
+            background-color: #343a40;
+            color: white;
+            border-color: #495057;
+        }
+        
+        .table-hover tbody tr:hover {
+            background-color: rgba(102, 126, 234, 0.1);
+        }
+        
+        #generatedQuery {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #495057;
+        }
     </style>
 </head>
 <body>
@@ -201,8 +226,175 @@
                     </div>
                 </div>
 
+                <!-- SQL Query Builder -->
+                <div class="card mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="fas fa-code me-2"></i>
+                                SQL Query Builder
+                            </h6>
+                            <button class="btn btn-sm btn-outline-light" onclick="toggleQueryBuilder()">
+                                <i class="fas fa-chevron-down" id="queryBuilderIcon"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body" id="queryBuilderContent" style="display: none;">
+                        <!-- SELECT clause -->
+                        <div class="row mb-3">
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold text-primary">SELECT</label>
+                            </div>
+                            <div class="col-md-10">
+                                <div class="form-check-inline">
+                                    <input class="form-check-input" type="checkbox" id="selectDocId" checked>
+                                    <label class="form-check-label" for="selectDocId">doc_id</label>
+                                </div>
+                                <div class="form-check-inline">
+                                    <input class="form-check-input" type="checkbox" id="selectFilename" checked>
+                                    <label class="form-check-label" for="selectFilename">filename</label>
+                                </div>
+                                <div class="form-check-inline">
+                                    <input class="form-check-input" type="checkbox" id="selectText" checked>
+                                    <label class="form-check-label" for="selectText">text_content</label>
+                                </div>
+                                <div class="form-check-inline">
+                                    <input class="form-check-input" type="checkbox" id="selectCreatedAt">
+                                    <label class="form-check-label" for="selectCreatedAt">created_at</label>
+                                </div>
+                                <div class="form-check-inline">
+                                    <input class="form-check-input" type="checkbox" id="selectSize">
+                                    <label class="form-check-label" for="selectSize">size</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FROM clause -->
+                        <div class="row mb-3">
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold text-success">FROM</label>
+                            </div>
+                            <div class="col-md-10">
+                                <input type="text" class="form-control" value="Documents" readonly>
+                            </div>
+                        </div>
+
+                        <!-- WHERE clause -->
+                        <div class="row mb-3">
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold text-warning">WHERE</label>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="whereField">
+                                    <option value="text_content">text_content</option>
+                                    <option value="filename">filename</option>
+                                    <option value="metadata">metadata</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-select" id="whereOperator">
+                                    <option value="@@">@@ (text search)</option>
+                                    <option value="LIKE">LIKE</option>
+                                    <option value="=">= (equals)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="whereValue" placeholder="search text...">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="showTextEditor()">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- LIMIT clause -->
+                        <div class="row mb-3">
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold text-info">LIMIT</label>
+                            </div>
+                            <div class="col-md-10">
+                                <input type="number" class="form-control" id="limitValue" value="10" min="1" max="100" style="width: 100px;">
+                            </div>
+                        </div>
+
+                        <!-- Generated Query Preview -->
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <label class="form-label fw-bold">Generated Query:</label>
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <code id="generatedQuery" style="white-space: pre-wrap;"></code>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Execute Button -->
+                        <div class="text-end">
+                            <button class="btn btn-primary" onclick="executeQuery()">
+                                <i class="fas fa-play me-2"></i>
+                                Execute Query
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Search Results -->
                 <div id="searchResults"></div>
+            </div>
+
+            <!-- Document Details Modal -->
+            <div class="modal fade" id="documentModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header bg-primary text-white">
+                            <h5 class="modal-title">
+                                <i class="fas fa-file-alt me-2"></i>
+                                Document Details
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="documentDetails"></div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Text Editor Modal -->
+            <div class="modal fade" id="textEditorModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header bg-warning text-dark">
+                            <h5 class="modal-title">
+                                <i class="fas fa-edit me-2"></i>
+                                Text Editor - WHERE Clause
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label for="textEditorContent" class="form-label">Enter your search text:</label>
+                                <textarea class="form-control" id="textEditorContent" rows="10" placeholder="Enter large text content here..."></textarea>
+                            </div>
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Tip:</strong> This editor allows you to enter long text queries that will be used in the WHERE clause. The text will be properly escaped and formatted.
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" onclick="saveTextFromEditor()">
+                                <i class="fas fa-save me-2"></i>
+                                Save Text
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Sidebar -->
@@ -260,6 +452,24 @@
                         </button>
                     </div>
                 </div>
+
+                <!-- Documents List -->
+                <div class="card mt-4">
+                    <div class="card-header bg-success text-white">
+                        <h6 class="mb-0">
+                            <i class="fas fa-list me-2"></i>
+                            Documentos Indexados
+                        </h6>
+                    </div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                        <div id="documentsList">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <p class="mt-2">Loading documents...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -279,6 +489,7 @@
         // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
             loadStats();
+            loadDocumentsList();
             checkAPIConnection();
         });
 
@@ -311,6 +522,66 @@
             }
         }
 
+        // Load documents list
+        async function loadDocumentsList() {
+            const container = document.getElementById('documentsList');
+            
+            try {
+                const response = await fetch(`${API_BASE}/documents`);
+                if (response.ok) {
+                    const documents = await response.json();
+                    displayDocumentsList(documents);
+                } else {
+                    container.innerHTML = '<div class="text-center text-muted">Failed to load documents</div>';
+                }
+            } catch (error) {
+                console.error('Error loading documents:', error);
+                container.innerHTML = '<div class="text-center text-muted">Error loading documents</div>';
+            }
+        }
+
+        // Display documents list
+        function displayDocumentsList(documents) {
+            const container = document.getElementById('documentsList');
+            
+            if (documents.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-muted">
+                        <i class="fas fa-inbox"></i>
+                        <p class="mt-2">No documents found</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            documents.forEach((doc, index) => {
+                html += `
+                    <div class="document-item border-bottom py-2 ${index === 0 ? 'border-top' : ''}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">
+                                    <a href="#" class="text-decoration-none" onclick="showDocumentDetails('${doc.doc_id}')" title="Click to view details">
+                                        <i class="fas fa-file-alt me-1 text-primary"></i>
+                                        ${doc.filename}
+                                    </a>
+                                </h6>
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    ${doc.created_at || 'Unknown date'}
+                                </small>
+                            </div>
+                            <small class="text-muted">
+                                ${doc.size} chars
+                            </small>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
         // Set search query
         function setQuery(query) {
             document.getElementById('searchInput').value = query;
@@ -334,9 +605,13 @@
 
                 if (response.ok) {
                     const data = await response.json();
-                    const searchTime = Date.now() - startTime;
-                    displaySearchResults(data.results, query, searchTime);
-                    showToast('Search Complete', `Found ${data.total_found} results in ${data.search_time_ms}ms!`, 'success');
+                    const frontendTime = Date.now() - startTime;
+                    const backendTime = data.search_time_ms || 0;
+                    
+                    displaySearchResults(data.results, query, frontendTime, backendTime);
+                    showToast('Search Complete', 
+                        `Found ${data.total_found} results. Frontend: ${frontendTime}ms, Backend: ${backendTime}ms`, 
+                        'success');
                 } else {
                     throw new Error('Search failed');
                 }
@@ -347,20 +622,41 @@
         }
 
         // Display search results
-        function displaySearchResults(results, query, searchTime) {
+        function displaySearchResults(results, query, frontendTime, backendTime = null) {
             const container = document.getElementById('searchResults');
             
+            const timeInfo = backendTime ? 
+                `Frontend: ${frontendTime}ms, Backend: ${backendTime}ms` : 
+                `${frontendTime}ms`;
+                
             if (results.length === 0) {
                 container.innerHTML = `
                     <div class="alert alert-info">
                         <h6>No results found for "${query}"</h6>
                         <p class="mb-0">Try different keywords or upload more documents.</p>
+                        <small class="text-muted mt-2 d-block">
+                            <i class="fas fa-clock me-1"></i>
+                            Query executed in ${timeInfo}
+                        </small>
                     </div>
                 `;
                 return;
             }
 
-            let html = `<h5 class="mb-3">Search Results for "${query}"</h5>`;
+            let html = `
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">Search Results for "${query}"</h5>
+                    <div class="text-muted">
+                        <small>
+                            <i class="fas fa-clock me-1"></i>
+                            ${timeInfo}
+                            <span class="mx-2">•</span>
+                            <i class="fas fa-list me-1"></i>
+                            ${results.length} results
+                        </small>
+                    </div>
+                </div>
+            `;
             
             results.forEach((result, index) => {
                 const similarity = (result.similarity_score * 100).toFixed(1);
@@ -370,7 +666,9 @@
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <h6 class="mb-1">
                                     <i class="fas fa-file-alt me-2 text-primary"></i>
-                                    ${result.filename}
+                                    <a href="#" class="text-decoration-none" onclick="showDocumentDetails('${result.doc_id}')" title="Click to view details">
+                                        ${result.filename}
+                                    </a>
                                 </h6>
                                 <span class="badge similarity-badge text-white">
                                     <i class="fas fa-star me-1"></i>
@@ -417,6 +715,7 @@
                     document.getElementById('textContent').value = '';
                     document.getElementById('fileName').value = '';
                     loadStats();
+                    loadDocumentsList();
                 } else {
                     throw new Error('Upload failed');
                 }
@@ -449,6 +748,7 @@
                     showToast('Upload Success', `File "${data.filename}" uploaded successfully!`, 'success');
                     fileInput.value = '';
                     loadStats();
+                    loadDocumentsList();
                 } else {
                     throw new Error('File upload failed');
                 }
@@ -474,6 +774,313 @@
                 showToast('Finalization Error', 'Finalization failed. Please try again.', 'danger');
             }
         }
+
+        // Show document details in a modal
+        async function showDocumentDetails(docId) {
+            try {
+                const response = await fetch(`${API_BASE}/documents/${docId}`);
+                if (response.ok) {
+                    const document = await response.json();
+                    displayDocumentAsTable(document);
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('documentModal'));
+                    modal.show();
+                } else {
+                    showToast('Error', 'Could not load document details.', 'danger');
+                }
+            } catch (error) {
+                console.error('Error fetching document:', error);
+                showToast('Error', 'Failed to load document details.', 'danger');
+            }
+        }
+
+        // Display document details in SQL table format
+        function displayDocumentAsTable(doc) {
+            const detailsContainer = document.getElementById('documentDetails');
+            
+            // Create a table showing document fields like SQL record
+            let tableHtml = `
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width: 25%;">Field</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>doc_id</strong></td>
+                                <td><code>${doc.doc_id || 'N/A'}</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>filename</strong></td>
+                                <td>${doc.metadata?.filename || 'Unknown'}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>created_at</strong></td>
+                                <td>${doc.metadata?.created_at || 'Unknown'}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>size</strong></td>
+                                <td>${doc.metadata?.size || 0} characters</td>
+                            </tr>
+                            <tr>
+                                <td><strong>uploaded_via</strong></td>
+                                <td>${doc.metadata?.uploaded_via || 'Unknown'}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>type</strong></td>
+                                <td>${doc.metadata?.type || 'text'}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>token_count</strong></td>
+                                <td>${doc.metadata?.token_count || 'N/A'}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="mt-3">
+                    <h6><i class="fas fa-file-text me-2"></i>Text Content:</h6>
+                    <div class="card">
+                        <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                            <pre class="mb-0" style="white-space: pre-wrap; font-family: inherit;">${doc.text}</pre>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            detailsContainer.innerHTML = tableHtml;
+        }
+
+        // SQL Query Builder Functions
+        function toggleQueryBuilder() {
+            const content = document.getElementById('queryBuilderContent');
+            const icon = document.getElementById('queryBuilderIcon');
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.className = 'fas fa-chevron-up';
+                updateGeneratedQuery();
+            } else {
+                content.style.display = 'none';
+                icon.className = 'fas fa-chevron-down';
+            }
+        }
+
+        function updateGeneratedQuery() {
+            // Build SELECT clause
+            const selectFields = [];
+            if (document.getElementById('selectDocId').checked) selectFields.push('doc_id');
+            if (document.getElementById('selectFilename').checked) selectFields.push('filename');
+            if (document.getElementById('selectText').checked) selectFields.push('text_content');
+            if (document.getElementById('selectCreatedAt').checked) selectFields.push('created_at');
+            if (document.getElementById('selectSize').checked) selectFields.push('size');
+            
+            const selectClause = selectFields.length > 0 ? selectFields.join(', ') : '*';
+            
+            // Build WHERE clause
+            const whereField = document.getElementById('whereField').value;
+            const whereOperator = document.getElementById('whereOperator').value;
+            const whereValue = document.getElementById('whereValue').value;
+            
+            let whereClause = '';
+            if (whereValue.trim()) {
+                const escapedValue = whereValue.replace(/'/g, "''");
+                whereClause = `WHERE ${whereField} ${whereOperator} '${escapedValue}'`;
+            }
+            
+            // Build LIMIT clause
+            const limitValue = document.getElementById('limitValue').value;
+            const limitClause = `LIMIT ${limitValue}`;
+            
+            // Generate full query
+            const query = `SELECT ${selectClause}
+FROM Documents
+${whereClause}
+${limitClause};`;
+            
+            document.getElementById('generatedQuery').textContent = query;
+        }
+
+        function showTextEditor() {
+            const currentText = document.getElementById('whereValue').value;
+            document.getElementById('textEditorContent').value = currentText;
+            
+            const modal = new bootstrap.Modal(document.getElementById('textEditorModal'));
+            modal.show();
+        }
+
+        function saveTextFromEditor() {
+            const text = document.getElementById('textEditorContent').value;
+            document.getElementById('whereValue').value = text;
+            updateGeneratedQuery();
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('textEditorModal'));
+            modal.hide();
+        }
+
+        function executeQuery() {
+            const whereValue = document.getElementById('whereValue').value.trim();
+            const limitValue = document.getElementById('limitValue').value;
+            
+            if (!whereValue) {
+                showToast('Query Error', 'Please enter a search value in the WHERE clause.', 'warning');
+                return;
+            }
+            
+            // Execute the search using the query builder values
+            performSearchWithQuery(whereValue, parseInt(limitValue));
+        }
+
+        async function performSearchWithQuery(query, limit) {
+            const resultsContainer = document.getElementById('searchResults');
+            resultsContainer.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-2">Executing SQL query...</p></div>';
+
+            try {
+                const startTime = Date.now();
+                const response = await fetch(`${API_BASE}/search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query, k: limit })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const frontendTime = Date.now() - startTime;
+                    const backendTime = data.search_time_ms || 0;
+                    
+                    // Show both frontend and backend times in the display
+                    displaySearchResultsAsTable(data.results, query, frontendTime, backendTime);
+                    
+                    showToast('Query Executed', 
+                        `Found ${data.total_found} results. Frontend: ${frontendTime}ms, Backend: ${backendTime}ms`, 
+                        'success');
+                } else {
+                    throw new Error('Query execution failed');
+                }
+            } catch (error) {
+                resultsContainer.innerHTML = '<div class="alert alert-danger">Query execution failed. Please try again.</div>';
+                showToast('Query Error', 'Query execution failed. Please try again.', 'danger');
+            }
+        }
+
+        function displaySearchResultsAsTable(results, query, frontendTime, backendTime = null) {
+            const container = document.getElementById('searchResults');
+            
+            if (results.length === 0) {
+                const timeInfo = backendTime ? 
+                    `Frontend: ${frontendTime}ms, Backend: ${backendTime}ms` : 
+                    `${frontendTime}ms`;
+                
+                container.innerHTML = `
+                    <div class="alert alert-info">
+                        <h6>No results found for query</h6>
+                        <p class="mb-0">Try different search terms or check your WHERE clause.</p>
+                        <small class="text-muted mt-2 d-block">
+                            <i class="fas fa-clock me-1"></i>
+                            Query executed in ${timeInfo}
+                        </small>
+                    </div>
+                `;
+                return;
+            }
+
+            // Get selected fields from checkboxes
+            const selectedFields = [];
+            if (document.getElementById('selectDocId').checked) selectedFields.push('doc_id');
+            if (document.getElementById('selectFilename').checked) selectedFields.push('filename');
+            if (document.getElementById('selectText').checked) selectedFields.push('text_content');
+            if (document.getElementById('selectCreatedAt').checked) selectedFields.push('created_at');
+            if (document.getElementById('selectSize').checked) selectedFields.push('size');
+
+            const timeInfo = backendTime ? 
+                `Frontend: ${frontendTime}ms, Backend: ${backendTime}ms` : 
+                `${frontendTime}ms`;
+
+            let html = `
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">
+                        <i class="fas fa-table me-2"></i>
+                        Query Results
+                    </h5>
+                    <div class="text-muted">
+                        <small>
+                            <i class="fas fa-clock me-1"></i>
+                            ${timeInfo}
+                            <span class="mx-2">•</span>
+                            <i class="fas fa-table me-1"></i>
+                            ${results.length} rows
+                        </small>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+            `;
+
+            // Add table headers based on selected fields
+            selectedFields.forEach(field => {
+                html += `<th>${field}</th>`;
+            });
+            html += `<th>similarity</th></tr></thead><tbody>`;
+
+            // Add table rows
+            results.forEach((result, index) => {
+                const similarity = (result.similarity_score * 100).toFixed(1);
+                html += `<tr>`;
+                
+                selectedFields.forEach(field => {
+                    let value = '';
+                    switch(field) {
+                        case 'doc_id':
+                            value = `<code class="text-primary">${result.doc_id}</code>`;
+                            break;
+                        case 'filename':
+                            value = `<a href="#" class="text-decoration-none" onclick="showDocumentDetails('${result.doc_id}')">${result.filename}</a>`;
+                            break;
+                        case 'text_content':
+                            value = `<div style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${result.text_preview}</div>`;
+                            break;
+                        case 'created_at':
+                            value = result.created_at || 'Unknown';
+                            break;
+                        case 'size':
+                            value = `${result.metadata?.size || 0} chars`;
+                            break;
+                    }
+                    html += `<td>${value}</td>`;
+                });
+                
+                html += `<td><span class="badge bg-primary">${similarity}%</span></td>`;
+                html += `</tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+            container.innerHTML = html;
+        }
+
+        // Add event listeners for query builder updates
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add event listeners after DOM is loaded
+            setTimeout(() => {
+                const queryInputs = ['selectDocId', 'selectFilename', 'selectText', 'selectCreatedAt', 'selectSize', 'whereField', 'whereOperator', 'whereValue', 'limitValue'];
+                queryInputs.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        if (element.type === 'checkbox') {
+                            element.addEventListener('change', updateGeneratedQuery);
+                        } else {
+                            element.addEventListener('input', updateGeneratedQuery);
+                            element.addEventListener('change', updateGeneratedQuery);
+                        }
+                    }
+                });
+            }, 100);
+        });
 
         // Show toast notification
         function showToast(title, message, type = 'info') {
