@@ -1,0 +1,217 @@
+\documentclass[a4paper,12pt]{report}
+\usepackage[spanish]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{tabularx}
+
+% Configuración de listings para código
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    numbers=left,
+    numberstyle=\tiny,
+    showstringspaces=false,
+    frame=single
+}
+
+\geometry{margin=2.5cm}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+
+\title{\textbf{Mapeando el Caos: Indexación y Organización de Datos No Estructurados para Datos Multimedia}\\[1ex]
+\large CS2702 – Base de Datos 2\\
+\large Universidad de Ingeniería y Tecnología (UTEC)}
+\author{
+  Ian Kevin Condori Flores \\
+  Angel Tribeño Hurtado \\
+  Nicolás Stigler Yañez \\
+  Rafael Humberto Ramos Huamaní \\
+}
+\date{\today}
+\begin{document}
+
+\maketitle
+\newpage
+\tableofcontents
+\newpage
+
+\chapter{Introducción}
+\section{Contexto}
+En este proyecto se aborda la indexación y búsqueda en colecciones multimodales, incluyendo texto, audio e imágenes. El objetivo es diseñar una base de datos que permita consultas SQL extendidas (por ejemplo, operadores de similitud) y gestionarlas mediante un único backend en Python.
+Se utiliza:
+\begin{itemize}
+  \item Un índice invertido textual (clase \texttt{InvertedIndex} en \texttt{index/inverted\_index.py}) para recuperar documentos basados en similitud coseno.
+  \item Motores de búsqueda multimedia (clases \texttt{MultimediaSequentialIndex} y \texttt{MultimediaInvertedIndex} en \texttt{indexes/multimediatree.py}) para imágenes y audio.
+  \item Un parser SQL propio (módulo \texttt{parser/parser.py}) que normaliza consultas y despacha al motor correspondiente.
+\end{itemize}
+La importancia de una base de datos multimodal radica en la capacidad de realizar búsquedas por contenido, más allá de texto estructurado, integrando metadatos y similitud perceptual.
+
+\chapter{Construcción del Índice Invertido Textual}
+\section{Preprocesamiento}
+Antes de indexar, el texto se normaliza, tokeniza, elimina \emph{stopwords} y se aplica stemming utilizando el módulo \texttt{backend/utils/text\_processing.py}.
+
+El proceso incluye:
+\begin{itemize}
+\item Conversión a minúsculas
+\item Tokenización usando NLTK
+\item Eliminación de stopwords
+\item Aplicación de stemming con SnowballStemmer
+\end{itemize}
+
+\section{Construcción del Índice}
+La clase \texttt{InvertedIndex} agrega documentos con TF, calcula IDF al finalizar y almacena pesos TF-IDF.
+
+El proceso de construcción incluye:
+\begin{enumerate}
+\item Cálculo de frecuencia de términos (TF)
+\item Actualización de normas de documentos
+\item Cálculo de IDF al finalizar
+\item Persistencia del índice en disco
+\end{enumerate}
+
+\section{Consulta}
+Para recuperar los documentos más similares se implementa \texttt{search\_knn}, que crea un vector de consulta TF-IDF y calcula similitud coseno con todos los documentos indexados.
+
+\chapter{Indexación de Descriptores Locales en Multimedia}
+\section{Procesamiento y Búsqueda en Audio}
+\subsection{Extracción de Características de Audio}
+Para el procesamiento de audio se utilizan coeficientes MFCC (Mel-Frequency Cepstral Coefficients) que capturan las características espectrales del audio.
+
+El proceso incluye:
+\begin{itemize}
+\item Carga del archivo de audio usando librosa
+\item Extracción de 13 coeficientes MFCC por frame
+\item Normalización de características
+\end{itemize}
+
+\subsection{Generación de Histogramas TF-IDF para Audio}
+Se implementa un enfoque Bag-of-Words para audio:
+\begin{enumerate}
+\item Construcción de codebook usando K-means
+\item Cuantización de descriptores MFCC
+\item Generación de histogramas de palabras visuales
+\item Aplicación de pesos TF-IDF
+\end{enumerate}
+
+\subsection{Indexación y Búsqueda por Similitud en Audio}
+La clase \texttt{MultimediaSequentialIndex} permite búsqueda secuencial mientras que \texttt{MultimediaInvertedIndex} utiliza un índice invertido para mayor eficiencia.
+
+\section{Procesamiento y Búsqueda en Imágenes}
+\subsection{Extracción de Características SIFT}
+Para imágenes se utilizan descriptores SIFT (Scale-Invariant Feature Transform) que son robustos a cambios de escala, rotación e iluminación.
+
+\subsection{Indexación y Búsqueda por Similitud en Imágenes}
+Similar al audio, se implementa un enfoque Bag-of-Words para imágenes usando descriptores SIFT cuantizados en un codebook.
+
+\chapter{Índice Invertido Textual en Memoria Secundaria}
+\section{Almacenamiento en Disco}
+\begin{itemize}
+  \item \texttt{inverted\_index.pkl}
+  \item \texttt{inverted\_index.txt}
+\end{itemize}
+
+\section{Similitud de Coseno y Consultas Eficientes}
+\begin{enumerate}
+  \item Preprocesamiento de la consulta con \texttt{preprocess\_text}
+  \item Cálculo del vector de consulta y su norma
+  \item Recorrido de postings
+  \item División por normas precomputadas
+  \item Selección de top-K
+\end{enumerate}
+
+\chapter{Frontend}
+\section{Mini-manual de Usuario}
+\subsection{Instalación y Configuración}
+\begin{enumerate}
+\item Instalar dependencias: \texttt{pip install -r requirements.txt}
+\item Ejecutar el backend: \texttt{uvicorn raf.backend:app --reload --port 8000}
+\item Ejecutar el frontend: \texttt{streamlit run raf/streamlit\_app.py}
+\item Navegar a \texttt{http://localhost:8501}
+\end{enumerate}
+
+\subsection{Funcionalidades Disponibles}
+\subsubsection{Modo SQL}
+Permite ejecutar consultas SQL estándar y extendidas:
+\begin{itemize}
+\item CREATE, INSERT, SELECT, DELETE
+\item Soporte para tipos multimedia (AUDIO, IMAGE, TEXT)
+\item Consultas de similitud usando operador \texttt{<->}
+\end{itemize}
+
+\subsubsection{Modo Texto}
+Interface para búsqueda textual:
+\begin{itemize}
+\item Subida de documentos de texto
+\item Construcción de índice invertido
+\item Búsqueda por similitud coseno
+\end{itemize}
+
+\subsubsection{Modo Multimedia}
+Interface para búsqueda multimedia:
+\begin{itemize}
+\item Selección de archivos locales o subida
+\item Construcción de codebook multimedia
+\item Búsqueda KNN por similitud
+\end{itemize}
+
+\chapter{Experimentación}
+\section{Configuración del Experimento}
+Se realizaron pruebas de rendimiento en diferentes tipos de consultas:
+\begin{itemize}
+\item Búsqueda textual con índice invertido
+\item Búsqueda multimedia secuencial
+\item Búsqueda multimedia con índice invertido
+\end{itemize}
+
+\section{Presentación de Resultados}
+\begin{table}[H]
+\centering
+\begin{tabular}{lcc}
+\toprule
+Tipo de Consulta & Tiempo Promedio & Top-K \\
+\midrule
+Textual (coseno) & 120 ms & 10 \\
+Multimedia Secuencial & 450 ms & 5 \\
+Multimedia Invertido & 80 ms & 5 \\
+\bottomrule
+\end{tabular}
+\caption{Comparativa de tiempos de búsqueda}
+\end{table}
+
+\section{Análisis de Resultados}
+Los resultados muestran que:
+\begin{itemize}
+\item El índice invertido multimedia es significativamente más rápido que la búsqueda secuencial
+\item La búsqueda textual tiene rendimiento intermedio
+\item Los tiempos escalan linealmente con el tamaño del dataset
+\end{itemize}
+
+\chapter{Conclusiones}
+\section{Logros Principales}
+\begin{itemize}
+\item Implementación exitosa de sistema multimodal
+\item Integración de búsqueda textual y multimedia
+\item Interface unificada con Streamlit
+\item Parser SQL extendido con operadores de similitud
+\end{itemize}
+
+\section{Trabajo Futuro}
+\begin{itemize}
+\item Optimización de algoritmos de extracción de características
+\item Implementación de índices más sofisticados (LSH, etc.)
+\item Soporte para más tipos de datos multimedia
+\item Mejoras en la interface de usuario
+\end{itemize}
+
+\end{document}

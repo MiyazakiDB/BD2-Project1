@@ -167,11 +167,11 @@ class MultimediaSequentialIndex(MultimediaIndexBase):
         Returns:
             Lista de tuplas (record_id, similitud, metadatos)
         """
-        if not self.search_engine:
-            # Si no hay motor de búsqueda, intentar construir índice
+        # Construir o actualizar índice si no tiene registros
+        if not getattr(self.search_engine, 'records', None):
             self._build_or_update_index()
-        
-        if not self.search_engine or not self.search_engine.records:
+
+        if not self.search_engine or not getattr(self.search_engine, 'records', None):
             return []
         
         try:

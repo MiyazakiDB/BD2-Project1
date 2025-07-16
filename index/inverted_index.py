@@ -9,7 +9,13 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from backend.utils.text_processing import preprocess_text
+import re
+
+def preprocess_text(text):
+    # Fallback simple de tokenización
+    text = text.lower()
+    tokens = re.findall(r"\w+", text)
+    return [t for t in tokens if len(t) > 2]
 
 class InvertedIndex:
     def __init__(self, index_path):

@@ -17,6 +17,47 @@ from indexes.multimediatree import MultimediaSequentialIndex, MultimediaInverted
 
 router = APIRouter(prefix="/sql", tags=["queries"])
 
+# Endpoint público para testing sin autenticación
+@router.post("/public", response_model=QueryResult)
+def execute_query_public(
+    query_request: QueryRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint público para ejecutar consultas SQL sin autenticación (solo para testing)
+    """
+    query_lower = query_request.query.lower().strip()
+    
+    try:
+        start = time.time()
+        result, message = execute_sql(query_request.query)
+        end = time.time()
+        
+    except Exception as e:
+        end = time.time()
+        result, message = None, str(e)
+    
+    result_pagination = {
+        'columns': [],
+        'records': []
+    }
+    
+    if result is not None:
+        result_pagination = {
+            'columns': result['columns'],
+            'records': result['records'][query_request.offset:query_request.offset + query_request.limit]
+        }
+        total = len(result['records'])
+    else:
+        total = 0
+    
+    return {
+        'data': result_pagination,
+        'total': total,
+        'message': message,
+        'execution_time': end - start
+    }
+
 @router.post("/", response_model=QueryResult)
 def execute_query(
     query_request: QueryRequest,

@@ -4,7 +4,7 @@ if root_path not in sys.path:
     sys.path.append(root_path)
 from parser.scanner import Token, Scanner
 from engine.model_condition import BinaryOp, Condition, ConditionColumn, ConditionValue, NotCondition, BinaryCondition, BetweenCondition, BooleanColumn
-from engine.model import TableSchema, DataType, IndexType, SelectSchema, DeleteSchema, ConditionSchema, Column
+from engine.model import TableSchema, DataType, IndexType, SelectSchema, DeleteSchema, Column
 from engine.dbmanager import DBManager
 from engine.record import RecordFile
 import time
@@ -253,9 +253,16 @@ class Parser:
         create_table_stmt.table_name = self.previous.lexema
         if not self.match(Token.Type.LPAR):
             self.error("expected '(' after table name")
+        # Al menos una definición de columna
         create_table_stmt.add_column_definition(self.parse_column_def())
-        while self.match(Token.Type.COMMA):
-            create_table_stmt.add_column_definition(self.parse_column_def())
+        # Columnas adicionales y/o coma final
+        while True:
+            if self.match(Token.Type.COMMA):
+                # Si viene otro identificador, parseamos; si no, es coma final
+                if self.check(Token.Type.ID):
+                    create_table_stmt.add_column_definition(self.parse_column_def())
+                    continue
+            break
         if not self.match(Token.Type.RPAR):
             self.error("expected ')' after column definitions")
         return create_table_stmt
@@ -281,12 +288,19 @@ class Parser:
                 column_definition.varchar_limit = int(self.previous.lexema)
                 if not self.match(Token.Type.RPAR):
                     self.error("expected ')' after number")
+            case "TEXT":
+                # Alias para texto, usar VARCHAR sin límite
+                column_definition.data_type = DataType.VARCHAR
             case "DATE":
                 column_definition.data_type = DataType.DATE
             case "BOOL":
                 column_definition.data_type = DataType.BOOL
             case "POINT":
                 column_definition.data_type = DataType.POINT
+            case "IMAGE":
+                column_definition.data_type = DataType.IMAGE
+            case "AUDIO":
+                column_definition.data_type = DataType.AUDIO
             case _:
                 self.error("unknown data type")
         if self.match(Token.Type.PRIMARY):
@@ -909,7 +923,7 @@ class Interpreter:
         # Manejo de select normal
         select_schema = SelectSchema(
             table_name=stmt.table_name,
-            condition_schema=ConditionSchema(stmt.condition) if stmt.condition else None,
+            condition_schema=stmt.condition,
             all=stmt.all,
             column_list=stmt.column_list,
             order_by=stmt.order_by,
@@ -932,7 +946,7 @@ class Interpreter:
         self.db_manager.insert(stmt.table_name, stmt.value_list, stmt.column_list)
 
     def interpret_delete_stmt(self, stmt : DeleteStmt):
-        delete_schema = DeleteSchema(stmt.table_name, ConditionSchema(stmt.condition))
+        delete_schema = DeleteSchema(stmt.table_name, stmt.condition)
         self.db_manager.delete(delete_schema)
 
     def interpret_create_index_stmt(self, stmt : CreateIndexStmt):
@@ -969,6 +983,9 @@ def print_sql(sql: str):
         print(printer.print(sql_parse))
     except RuntimeError as e:
         return None, str(e)
+
+
+
 # <->
 def select_with_multimedia_similarity(table_schema, similarity_condition, limit=None):
     """
@@ -982,52 +999,31 @@ def select_with_multimedia_similarity(table_schema, similarity_condition, limit=
     Returns:
         dict: Resultados con columnas y registros
     """
-    # Obtener la columna del esquema
-    column_name = similarity_condition.column.name
+    # Obtener la columna y verificar tipo multimedia
+    column_name = similarity_condition.column.column_name
     column = table_schema.get_column_by_name(column_name)
-    
-    if not column:
-        raise RuntimeError(f"Columna {column_name} no encontrada en tabla {table_schema.table_name}")
-    
-    # Verificar si la columna es de tipo multimedia (IMAGE o AUDIO)
-    if column.data_type != DataType.IMAGE and column.data_type != DataType.AUDIO:
-        raise RuntimeError(f"Columna {column_name} no es de tipo multimedia (IMAGE o AUDIO)")
-    
-    # Verificar si la columna tiene un índice adecuado
+    if not column or column.data_type not in (DataType.IMAGE, DataType.AUDIO):
+        raise RuntimeError(f"Columna {column_name} no es IMAGE o AUDIO")
+
+    # Verificar índice multimedia
     if column.index_type not in (IndexType.MULTIMEDIA_SEQUENTIAL, IndexType.MULTIMEDIA_INVERTED):
-        raise RuntimeError(f"Columna {column_name} no tiene un índice multimedia")
-    
-    # Obtener el índice
-    db_manager = DBManager()
-    index = db_manager.get_index(table_schema, column_name)
-    
-    # Realizar búsqueda por similitud
+        raise RuntimeError(f"Columna {column_name} sin índice multimedia")
+
+    # Obtener índice y realizar búsqueda KNN
+    dbm = DBManager()
+    idx = dbm.get_index(table_schema, column_name)
     query_path = similarity_condition.value
-    k = limit if limit else 10  # Por defecto 10 resultados si no se especifica límite
-    
-    # Obtener resultados
-    start_time = time.time()
-    results = index.similarity_search(query_path, k)
-    elapsed_time = time.time() - start_time
-    
-    # Extraer IDs de registros
-    record_ids = [record_id for record_id, _, _ in results]
-    
-    # Obtener registros
-    records = []
+    k = limit or 10
+    start = time.time()
+    results = idx.similarity_search(query_path, k)
+    elapsed = time.time() - start
+
+    # Preparar resultados
+    record_ids = [rid for rid, _, _ in results]
     record_file = RecordFile(table_schema)
-    for record_id in record_ids:
-        record = record_file.read(record_id)
-        if record:
-            records.append(record.values)
-    
-    # Preparar columnas de resultado
+    rows = [record_file.read(rid).values for rid in record_ids]
     columns = [col.name for col in table_schema.columns]
-    
-    print(f"Búsqueda multimedia completada en {elapsed_time:.4f} segundos")
-    
-    return {
-        "columns": columns,
-        "records": records,
-        "elapsed_time": elapsed_time
-    }
+
+    return {"columns": columns, "records": rows, "elapsed_time": elapsed}
+
+# End of parser.py

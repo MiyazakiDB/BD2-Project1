@@ -28,7 +28,7 @@
 
 <column-def> ::= <column-name> <data-type> [ "PRIMARY" "KEY" ] [ "INDEX" <index-type> ]
 
-<data-type> ::= "INT" | "FLOAT" | "VARCHAR" "(" <number> ")" | "BOOLEAN"
+<data-type> ::= "INT" | "FLOAT" | "VARCHAR" "(" <number> ")" | "BOOLEAN" | "TEXT" | "AUDIO" | "IMAGE"
 
 <column-list> ::= <column-name> { "," <column-name> }
 
@@ -46,7 +46,9 @@
 
 <predicate> ::= <simple-condition> | "(" <condition> ")"
 
-<simple-condition> ::= <column-name> <operator> <value> | <column-name> "BETWEEN" <value> "AND" <value>
+<simple-condition> ::= <column-name> <operator> <value> 
+                     | <column-name> "BETWEEN" <value> "AND" <value>
+                     | <column-name> "<->" <value>
 
 <operator> ::= "=" | "<>" | "<" | ">" | "<=" | ">="
 
