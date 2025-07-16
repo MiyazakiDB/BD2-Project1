@@ -11,6 +11,7 @@ import TableData from './components/Tables/TableData';
 import QueryExecutor from './components/Query/QueryExecutor';
 import MetricsDisplay from './components/Metrics/MetricsDisplay';
 import Landing from './components/Landing/Landing';
+import TextSearch from './components/TextSearch/TextSearch';
 import { Container, Row, Col } from 'react-bootstrap';
 
 function App() {
@@ -54,6 +55,7 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
           <Route path="/register" element={<Register onLogin={handleLogin} />} />
+          <Route path="/text-search-demo" element={<TextSearch />} />
 
           {/* Rutas privadas CON layout */}
           <Route
@@ -73,6 +75,7 @@ function App() {
                       <Route path="/tables/:tableName" element={<TableData />} />
                       <Route path="/query" element={<QueryExecutor />} />
                       <Route path="/metrics" element={<MetricsDisplay />} />
+                      <Route path="/text-search" element={<TextSearch />} />
                       <Route path="*" element={<Navigate to="/" />} />
                     </Routes>
                   </Col>

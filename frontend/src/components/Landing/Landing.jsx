@@ -14,6 +14,7 @@ export default function Landing() {
           <img src={logo} alt="Smart Stock Logo" />
         </div>
         <div className="nav-links">
+          <Link to="/text-search-demo" className="nav-button demo-btn">Text Search Demo</Link>
           <Link to="/login" className="nav-button login-btn">Login</Link>
           <Link to="/register" className="nav-button register-btn">Register</Link>
         </div>
