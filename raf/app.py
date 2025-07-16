@@ -152,6 +152,21 @@ else:  # Multimedia
 
     tbl = st.text_input("Tabla multimedia", "Multimedia")
     col = st.text_input("Columna multimedia", "file_path")
+    # Botón para poblar la tabla automáticamente con media_queries
+    if st.button("Será Multimedia"):
+        st.info(f"Poblando tabla '{tbl}' con archivos de media_queries...")
+        resp = requests.post(
+            f"{API_URL}/multimedia/populate",
+            data={"target_table": tbl, "path_column": col, "title_column": "title"}
+        )
+        if resp.ok:
+            result = resp.json()
+            st.success(f"✅ Insertados: {result.get('inserted',0)} registros")
+            errors = result.get('errors', [])
+            if errors:
+                st.warning(f"⚠️ Errores: {errors}")
+        else:
+            st.error(f"❌ Error: {resp.text}")
     method = st.selectbox("Método", ["sequential", "inverted"])
     topk = st.number_input("Top-K", min_value=1, value=5)
 

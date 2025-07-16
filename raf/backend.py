@@ -438,19 +438,46 @@ def populate_multimedia_table(
     title_column: str = Form(...),
     extensions: str = Form("wav,mp3,jpg,png")
 ):
-    """Carga todos los archivos de media_queries a la tabla multimedia para pruebas."""
+    """Carga todos los archivos de media_queries a la tabla multimedia para pruebas sin indexar inmediatamente."""
     mq_dir = os.path.join(os.path.dirname(__file__), "media_queries")
     dbm = DBManager()
+    # Obtener esquema y posición de columnas
+    schema = dbm.get_table_schema(target_table)
+    # Índice de columnas en TableSchema
+    cols = [col.name for col in schema.columns]
+    try:
+        pk_idx = cols.index(schema.get_primary_key().name)
+    except Exception:
+        pk_idx = 0
+    try:
+        path_idx = cols.index(path_column)
+    except Exception:
+        return JSONResponse(status_code=400, content={"detail": f"Columna ruta '{path_column}' no existe"})
+    try:
+        title_idx = cols.index(title_column)
+    except Exception:
+        return JSONResponse(status_code=400, content={"detail": f"Columna título '{title_column}' no existe"})
+    # Preparar archivo de registros
+    from engine.record import Record, RecordFile
+    record_file = RecordFile(schema)
+    next_id = record_file.max_id()
     inserted = 0
     errors = []
     exts = [ext.strip().lower() for ext in extensions.split(",")]
+    # Recorrer archivos
     for fname in os.listdir(mq_dir):
         if any(fname.lower().endswith(ext) for ext in exts):
             file_path = os.path.join(mq_dir, fname)
             title = os.path.splitext(fname)[0]
             try:
-                # Insertar usando columnas especificadas
-                dbm.insert(target_table, [file_path, title], [path_column, title_column])
+                # Construir registro
+                rec = Record(schema)
+                rec.values[pk_idx] = next_id
+                rec.values[path_idx] = file_path
+                rec.values[title_idx] = title
+                # Escribir en data.dat
+                record_file.write(rec)
+                next_id += 1
                 inserted += 1
             except Exception as e:
                 errors.append({"file": fname, "error": str(e)})

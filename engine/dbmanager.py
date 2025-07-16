@@ -436,6 +436,14 @@ class DBManager:
             self.error(f"the number of values doesn't match the number of columns")
 
         record = Record(table_schema)
+        # Asignar clave primaria si no fue especificada (auto-incremento)
+        for idx_col, col_schema in enumerate(table_schema.columns):
+            if col_schema.is_primary and record.values[idx_col] is None:
+                from engine.record import RecordFile
+                record_file = RecordFile(table_schema)
+                # Usar la siguiente posición libre como ID
+                record.values[idx_col] = record_file.max_id()
+                break
         
         if len(columns) == 0:
             record.values = values

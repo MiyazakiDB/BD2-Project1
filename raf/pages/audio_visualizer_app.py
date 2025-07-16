@@ -701,6 +701,6 @@ def plot_waveform_segments(audio_path, segment_duration=5, title="Forma de Onda 
     return fig
 
 # === PUNTO DE ENTRADA PRINCIPAL ===
-if __name__ == "__main__":
-    main()
+# Ejecutar la interfaz al cargar la página en Streamlit
+main()
 
