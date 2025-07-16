@@ -166,7 +166,7 @@ BD2-Project1/
 ├── complete_demo.py            # Complete demonstration script
 ├── api_client_demo.py          # API client example
 ├── test_text_search.py         # Core functionality test
-├── index/
+├── indexes/
 │   └── inverted_index.py       # Inverted index implementation
 ├── backend/
 │   ├── text_search/

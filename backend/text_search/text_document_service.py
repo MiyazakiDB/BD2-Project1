@@ -9,7 +9,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from index.inverted_index import InvertedIndex
+from indexes.inverted_index import InvertedIndex
 
 class TextDocumentService:
     def __init__(self, index_path="./data/text_index"):
