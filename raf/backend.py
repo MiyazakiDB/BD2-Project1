@@ -283,8 +283,10 @@ def execute_sql_query(request: QueryRequest):
             execution_time=0
         )
 
-# ===== ENDPOINTS MULTIMEDIA =====
 
+
+
+# ===== ENDPOINTS MULTIMEDIA =====
 @app.post("/sql/multimedia")
 def execute_multimedia_query(
     target_table: str = Form(...),
@@ -436,10 +438,16 @@ def populate_multimedia_table(
     target_table: str = Form(...),
     path_column: str = Form(...),
     title_column: str = Form(...),
-    extensions: str = Form("wav,mp3,jpg,png")
+    extensions: str = Form("wav,mp3,jpg,png"),
+    source_directory: str = Form("media_queries"),
+    specific_files: str = Form(None)
 ):
     """Carga todos los archivos de media_queries a la tabla multimedia para pruebas sin indexar inmediatamente."""
-    mq_dir = os.path.join(os.path.dirname(__file__), "media_queries")
+    # Determinar directorio fuente (media_queries o img_queries)
+    base_dir = os.path.dirname(__file__)
+    mq_dir = os.path.join(base_dir, source_directory)
+    if not os.path.isdir(mq_dir):
+        mq_dir = os.path.join(base_dir, "media_queries")
     dbm = DBManager()
     # Obtener esquema y posición de columnas
     schema = dbm.get_table_schema(target_table)
@@ -464,23 +472,37 @@ def populate_multimedia_table(
     inserted = 0
     errors = []
     exts = [ext.strip().lower() for ext in extensions.split(",")]
-    # Recorrer archivos
-    for fname in os.listdir(mq_dir):
-        if any(fname.lower().endswith(ext) for ext in exts):
-            file_path = os.path.join(mq_dir, fname)
-            title = os.path.splitext(fname)[0]
-            try:
-                # Construir registro
-                rec = Record(schema)
-                rec.values[pk_idx] = next_id
-                rec.values[path_idx] = file_path
-                rec.values[title_idx] = title
-                # Escribir en data.dat
-                record_file.write(rec)
-                next_id += 1
-                inserted += 1
-            except Exception as e:
-                errors.append({"file": fname, "error": str(e)})
+    # Recorrer archivos: si se especificaron nombres concretos, usar solo esos
+    file_list = []
+    if specific_files:
+        for fname in specific_files.split(','):
+            f = fname.strip()
+            if f:
+                file_list.append(f)
+    else:
+        # Tomar todos los archivos que coincidan con extensiones
+        for fname in os.listdir(mq_dir):
+            if any(fname.lower().endswith(ext) for ext in exts):
+                file_list.append(fname)
+    
+    # Insertar registros
+    for fname in file_list:
+        file_path = os.path.join(mq_dir, fname)
+        if not os.path.isfile(file_path):
+            continue
+        title = os.path.splitext(fname)[0]
+        try:
+            # Construir registro
+            rec = Record(schema)
+            rec.values[pk_idx] = next_id
+            rec.values[path_idx] = file_path
+            rec.values[title_idx] = title
+            # Escribir en data.dat
+            record_file.write(rec)
+            next_id += 1
+            inserted += 1
+        except Exception as e:
+            errors.append({"file": fname, "error": str(e)})
     return {"inserted": inserted, "errors": errors}
 
 # ===== DASHBOARD (SIMPLIFICADO) =====

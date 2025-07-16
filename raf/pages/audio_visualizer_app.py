@@ -24,6 +24,7 @@ st.set_page_config(
 plt.style.use('default')
 plt.rcParams['figure.facecolor'] = 'white'
 plt.rcParams['axes.facecolor'] = 'white'
+plt.rcParams['axes.prop_cycle'] = plt.cycler('color', ['b', 'g', 'r', 'c', 'm', 'y', 'k'])
 
 # Ocultar warning de deprecated functions
 import warnings
@@ -37,8 +38,13 @@ def plot_waveform(audio_path, title="Forma de Onda"):
     y, sr = librosa.load(audio_path, sr=None)
     
     fig, ax = plt.subplots(figsize=(12, 3))
-    librosa.display.waveshow(y, sr=sr, ax=ax)
+    # Usar plot manual en lugar de waveshow para evitar problemas de color
+    time_axis = np.linspace(0, len(y) / sr, len(y))
+    ax.plot(time_axis, y, linewidth=0.5, color='blue')
+    ax.set_xlabel('Tiempo (segundos)')
+    ax.set_ylabel('Amplitud')
     ax.set_title(title)
+    ax.grid(True, alpha=0.3)
     plt.tight_layout()
     return fig
 
@@ -49,7 +55,7 @@ def plot_spectrogram(audio_path, title="Espectrograma"):
     S_db = librosa.amplitude_to_db(abs(S))
 
     fig, ax = plt.subplots(figsize=(12, 4))
-    img = librosa.display.specshow(S_db, sr=sr, x_axis='time', y_axis='log', ax=ax)
+    img = librosa.display.specshow(S_db, sr=sr, x_axis='time', y_axis='log', ax=ax, cmap='viridis')
     fig.colorbar(img, ax=ax, format="%+2.0f dB")
     ax.set_title(title)
     plt.tight_layout()
@@ -62,7 +68,7 @@ def plot_mel_spectrogram(audio_path, title="Mel-Spectrograma"):
     S_db = librosa.power_to_db(S, ref=np.max)
 
     fig, ax = plt.subplots(figsize=(12, 4))
-    img = librosa.display.specshow(S_db, sr=sr, x_axis='time', y_axis='mel', ax=ax)
+    img = librosa.display.specshow(S_db, sr=sr, x_axis='time', y_axis='mel', ax=ax, cmap='viridis')
     fig.colorbar(img, ax=ax, format="%+2.0f dB")
     ax.set_title(title)
     plt.tight_layout()
@@ -74,7 +80,7 @@ def plot_mfcc(audio_path, title="MFCC"):
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
 
     fig, ax = plt.subplots(figsize=(12, 4))
-    img = librosa.display.specshow(mfcc, sr=sr, x_axis='time', ax=ax)
+    img = librosa.display.specshow(mfcc, sr=sr, x_axis='time', ax=ax, cmap='viridis')
     fig.colorbar(img, ax=ax)
     ax.set_title(title)
     plt.tight_layout()
@@ -90,11 +96,11 @@ def compare_mfccs(path1, path2, name1="Audio 1", name2="Audio 2"):
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
     
-    img1 = librosa.display.specshow(mfcc1, sr=sr1, x_axis='time', ax=ax1)
+    img1 = librosa.display.specshow(mfcc1, sr=sr1, x_axis='time', ax=ax1, cmap='viridis')
     ax1.set_title(f"MFCC - {name1}")
     fig.colorbar(img1, ax=ax1)
 
-    img2 = librosa.display.specshow(mfcc2, sr=sr2, x_axis='time', ax=ax2)
+    img2 = librosa.display.specshow(mfcc2, sr=sr2, x_axis='time', ax=ax2, cmap='viridis')
     ax2.set_title(f"MFCC - {name2}")
     fig.colorbar(img2, ax=ax2)
     
@@ -114,11 +120,11 @@ def compare_spectrograms(path1, path2, name1="Audio 1", name2="Audio 2"):
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
     
-    img1 = librosa.display.specshow(S1_db, sr=sr1, x_axis='time', y_axis='log', ax=ax1)
+    img1 = librosa.display.specshow(S1_db, sr=sr1, x_axis='time', y_axis='log', ax=ax1, cmap='viridis')
     ax1.set_title(f"Espectrograma - {name1}")
     fig.colorbar(img1, ax=ax1, format="%+2.0f dB")
 
-    img2 = librosa.display.specshow(S2_db, sr=sr2, x_axis='time', y_axis='log', ax=ax2)
+    img2 = librosa.display.specshow(S2_db, sr=sr2, x_axis='time', y_axis='log', ax=ax2, cmap='viridis')
     ax2.set_title(f"Espectrograma - {name2}")
     fig.colorbar(img2, ax=ax2, format="%+2.0f dB")
     
@@ -257,6 +263,13 @@ def main():
     
     # Sidebar para configuración
     st.sidebar.header("⚙️ Configuración")
+    
+    # Modo de operación (mover arriba)
+    mode = st.sidebar.selectbox(
+        "🎯 Modo de operación",
+        ["🔍 Análisis Individual", "⚖️ Comparación de Audios"]
+    )
+    
     st.sidebar.markdown("---")
     
     # Escanear directorios disponibles
@@ -335,12 +348,7 @@ def main():
     for dir_name, info in audio_dirs.items():
         st.sidebar.write(f"- **{dir_name}**: {info['count']} archivos")
     
-    # Modo de operación
-    mode = st.sidebar.selectbox(
-        "🎯 Modo de operación",
-        ["🔍 Análisis Individual", "⚖️ Comparación de Audios"]
-    )
-    
+    # Ejecutar el modo seleccionado
     if mode == "🔍 Análisis Individual":
         single_audio_analysis(audio_dirs)
     else:
@@ -350,22 +358,57 @@ def single_audio_analysis(audio_dirs):
     """🔍 Análisis de un solo audio"""
     st.header("🔍 Análisis Individual de Audio")
     
-    # Selección de directorio
-    selected_dir = st.selectbox(
-        "📂 Selecciona directorio",
-        list(audio_dirs.keys()),
-        format_func=lambda x: f"{x} ({audio_dirs[x]['count']} archivos)"
+    # Opción de fuente de audio
+    audio_source = st.radio(
+        "🎵 Fuente del audio:",
+        ["📁 Seleccionar de directorios", "📤 Subir mi propio archivo"],
+        horizontal=True
     )
     
-    # Selección de archivo
-    selected_file = st.selectbox(
-        "🎵 Selecciona archivo",
-        audio_dirs[selected_dir]["files"]
-    )
+    audio_path = None
+    selected_file = None
     
-    if selected_file:
-        audio_path = audio_dirs[selected_dir]["path"] / selected_file
+    if audio_source == "📁 Seleccionar de directorios":
+        # Selección de directorio
+        selected_dir = st.selectbox(
+            "📂 Selecciona directorio",
+            list(audio_dirs.keys()),
+            format_func=lambda x: f"{x} ({audio_dirs[x]['count']} archivos)"
+        )
         
+        # Selección de archivo
+        selected_file = st.selectbox(
+            "🎵 Selecciona archivo",
+            audio_dirs[selected_dir]["files"]
+        )
+        
+        if selected_file:
+            audio_path = audio_dirs[selected_dir]["path"] / selected_file
+    
+    else:  # Subir archivo propio
+        uploaded_file = st.file_uploader(
+            "📤 Sube tu archivo de audio",
+            type=["wav", "mp3", "flac", "m4a"],
+            help="Formatos soportados: WAV, MP3, FLAC, M4A"
+        )
+        
+        if uploaded_file is not None:
+            # Guardar archivo temporal
+            import tempfile
+            suffix = os.path.splitext(uploaded_file.name)[1]
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            tmp.write(uploaded_file.read())
+            tmp.close()
+            
+            audio_path = tmp.name
+            selected_file = uploaded_file.name
+            
+            # Mostrar preview del archivo subido
+            st.success(f"✅ Archivo cargado: {uploaded_file.name}")
+            st.audio(uploaded_file.getvalue())
+    
+    # Continuar con el análisis si hay un archivo seleccionado
+    if audio_path and selected_file:
         # Información del archivo
         st.subheader("📊 Información del Audio")
         info = get_audio_info(str(audio_path))
@@ -382,7 +425,12 @@ def single_audio_analysis(audio_dirs):
         
         # Reproducir audio
         st.subheader("🔊 Reproducir Audio")
-        st.audio(str(audio_path))
+        if audio_source == "📁 Seleccionar de directorios":
+            st.audio(str(audio_path))
+        else:
+            # Para archivos subidos, usar el archivo temporal
+            with open(audio_path, "rb") as f:
+                st.audio(f.read())
         
         # Selección de visualizaciones
         st.subheader("📈 Visualizaciones")

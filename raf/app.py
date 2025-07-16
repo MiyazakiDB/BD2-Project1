@@ -7,7 +7,7 @@ import pandas as pd
 # Configuración
 API_URL = "http://localhost:8000"
 
-st.title("Buscador Multimodal con Backend Unificado")
+st.title("MiyazakiDB")
 mode = st.sidebar.radio("Modo", ["SQL", "Multimedia", "Texto"])
 
 # ===== MODO SQL =====
@@ -18,6 +18,11 @@ if mode == "SQL":
     st.subheader("Ejemplos Rápidos")
     ejemplos = [
         "SELECT * FROM Audio LIMIT 5;",
+        "SELECT * FROM Images LIMIT 5;",
+        "DELETE FROM Images WHERE file_path LIKE '%media_queries%';",
+        "DELETE FROM Images WHERE file_path LIKE '%.wav' OR file_path LIKE '%.mp3';",
+        "SELECT COUNT(*) FROM Images;",
+        "CREATE TABLE Images (id INTEGER PRIMARY KEY, file_path IMAGE, title VARCHAR(255));",
         "CREATE TABLE test (id INT, name TEXT);",
         "INSERT INTO test VALUES (1, 'ejemplo');"
     ]
@@ -125,12 +130,35 @@ else:  # Multimedia
 
     # (Demo de archivos eliminado; usar subida propia en selección)
 
-    # Carpeta local de queries para búsqueda multimedia
+    # Carpetas locales separadas por tipo de multimedia
     LOCAL_MEDIA_DIR = os.path.abspath(os.path.join(os.getcwd(), "media_queries"))
+    LOCAL_IMG_DIR = os.path.abspath(os.path.join(os.getcwd(), "img_queries"))
+    
+    # Definir variables principales fuera de los bloques condicionales
+    tbl = st.text_input("Tabla multimedia", "Multimedia")
+    col = st.text_input("Columna multimedia", "file_path")
+    
+    # Detectar qué tipo de archivo se busca basado en la tabla seleccionada
+    is_image_table = tbl.lower() in ["images", "image"]
+    
+    # Seleccionar directorio y archivos apropiados según el tipo de tabla
+    if is_image_table:
+        query_dir = LOCAL_IMG_DIR
+        dir_name = "img_queries"
+        file_extensions = ("jpg", "png")
+        st.info(f"📁 Modo imágenes: usando directorio `{dir_name}`")
+    else:
+        query_dir = LOCAL_MEDIA_DIR
+        dir_name = "media_queries"
+        file_extensions = ("wav", "mp3")
+        st.info(f"📁 Modo multimedia: usando directorio `{dir_name}`")
+    
+    # Opciones de archivos disponibles según el tipo
     opciones = ["-- Subir archivo --"]
-    if os.path.isdir(LOCAL_MEDIA_DIR):
-        opciones += [f for f in os.listdir(LOCAL_MEDIA_DIR) if f.lower().endswith(("jpg","png","wav","mp3"))]
-    seleccionado = st.selectbox("Archivo consulta local", opciones)
+    if os.path.isdir(query_dir):
+        opciones += [f for f in os.listdir(query_dir) if f.lower().endswith(file_extensions)]
+    
+    seleccionado = st.selectbox(f"Archivo consulta local ({dir_name})", opciones)
 
     upload = None
     if seleccionado == "-- Subir archivo --":
@@ -142,40 +170,76 @@ else:  # Multimedia
             else:
                 st.audio(upload)
     else:
+        # Usar directorio apropiado según el tipo de tabla
+        path = os.path.join(query_dir, seleccionado)
+        
         # Mostrar preview del archivo seleccionado
-        path = os.path.join(LOCAL_MEDIA_DIR, seleccionado)
         st.write("**Preview del archivo seleccionado:**")
         if seleccionado.lower().endswith(('jpg','png')):
-            st.image(path, width=200)
+            if os.path.exists(path):
+                st.image(path, width=200)
+            else:
+                st.error(f"❌ Archivo no encontrado: {path}")
         else:
-            st.audio(path)
-
-    tbl = st.text_input("Tabla multimedia", "Multimedia")
-    col = st.text_input("Columna multimedia", "file_path")
-    # Botón para poblar la tabla automáticamente con media_queries
-    if st.button("Será Multimedia"):
-        st.info(f"Poblando tabla '{tbl}' con archivos de media_queries...")
-        resp = requests.post(
-            f"{API_URL}/multimedia/populate",
-            data={"target_table": tbl, "path_column": col, "title_column": "title"}
-        )
-        if resp.ok:
-            result = resp.json()
-            st.success(f"✅ Insertados: {result.get('inserted',0)} registros")
-            errors = result.get('errors', [])
-            if errors:
-                st.warning(f"⚠️ Errores: {errors}")
-        else:
-            st.error(f"❌ Error: {resp.text}")
+            if os.path.exists(path):
+                st.audio(path)
+            else:
+                st.error(f"❌ Archivo no encontrado: {path}")
+    
+    # Botones de población en columnas
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Botón para poblar la tabla automáticamente con el directorio correcto
+        if st.button("🗂️ Será Multimedia"):
+            if is_image_table:
+                st.info(f"Poblando tabla '{tbl}' con archivos de img_queries/...")
+                source_dir = "img_queries"
+            else:
+                st.info(f"Poblando tabla '{tbl}' con archivos de media_queries/...")
+                source_dir = "media_queries"
+                
+            resp = requests.post(
+                f"{API_URL}/multimedia/populate",
+                data={
+                    "target_table": tbl, 
+                    "path_column": col, 
+                    "title_column": "title",
+                    "source_directory": source_dir
+                }
+            )
+            if resp.ok:
+                result = resp.json()
+                st.success(f"✅ Insertados: {result.get('inserted',0)} registros")
+                st.info(f"📁 Origen: {source_dir}/ directory")
+                errors = result.get('errors', [])
+                if errors:
+                    st.warning(f"⚠️ Errores: {errors}")
+            else:
+                st.error(f"❌ Error: {resp.text}")
+    
     method = st.selectbox("Método", ["sequential", "inverted"])
     topk = st.number_input("Top-K", min_value=1, value=5)
 
     # Botón para construir el índice multimedia (codebook)
     if st.button("🔧 Finalizar Índice Multimedia"):
-        st.info(f"Construyendo índice {method} para tabla {tbl}, columna {col}...")
+        st.info(f"Construyendo índice {method} para tabla '{tbl}', columna '{col}'...")
+        # Determinar directorio fuente para el índice
+        source_dir = "img_queries" if is_image_table else "media_queries"
+        
+        # Debug: mostrar datos que se envían
+        request_data = {
+            "target_table": tbl,
+            "column_name": col,
+            "method": method,
+            "source_directory": source_dir
+        }
+        st.write(f"**Debug - Datos enviados al backend:**")
+        st.json(request_data)
+        
         r = requests.post(
             f"{API_URL}/multimedia/index",
-            data={"target_table": tbl, "column_name": col, "method": method}
+            data=request_data
         )
         if r.ok:
             st.success(r.json().get("message", "Índice multimedia construido"))
@@ -189,7 +253,9 @@ else:  # Multimedia
         filename = ""
         
         if seleccionado != "-- Subir archivo --":
-            path = os.path.join(LOCAL_MEDIA_DIR, seleccionado)
+            # Usar directorio correcto basado en la tabla
+            path = os.path.join(query_dir, seleccionado)
+                
             with open(path, "rb") as f:
                 file_content = f.read()
             file_to_send = ("file", (seleccionado, file_content))
@@ -213,7 +279,6 @@ else:  # Multimedia
             res = r.json()
             st.write(f"**Archivo consulta:** {filename}")
             st.write(f"**Método usado:** {method}")
-            st.write(f"**Tiempo:** {dt*1000:.1f} ms")
             
             results = res.get("data", [])
             if results:
@@ -221,9 +286,6 @@ else:  # Multimedia
                 st.dataframe(df)
                 
                 st.subheader("🎵 Reproducir Resultados")
-                # Debug: mostrar estructura de datos
-                st.write("**Debug - Datos recibidos:**")
-                st.json(results[:2] if len(results) > 2 else results)  # Mostrar solo primeros 2 para debug
                 
                 # Mostrar previews si están disponibles
                 for i, (_, row_data) in enumerate(df.iterrows(), 1):
@@ -235,24 +297,47 @@ else:  # Multimedia
                     title = row_data.get('title', f'Resultado {i}')
                     
                     st.write(f"**{i}. {title}**")
-                    st.write(f"Debug - media_path: `{media_path}`")
-                    st.write(f"Debug - file_path from data: `{row_data.get('file_path')}`")
                     
-                    # Si file_path está vacío, intentar reconstruir la ruta basada en los datos que tenemos
-                    if not media_path or media_path == "":
-                        # Intentar reconstruir la ruta basada en el título y la carpeta local
-                        if title and title != f'Resultado {i}':
-                            # Mapeo de títulos a archivos conocidos
-                            title_to_file = {
-                                "Bad Bunny – BAILE INOlVIDABLE": "Bad_Bunny_-_BAILE_INoLVIDABLE_preview.wav",
-                                "Geto Boys – Bring It On": "Geto_Boys_-_Bring_It_On_preview.wav", 
-                                "Halestorm – Freak Like Me": "Halestorm_-_Freak_Like_Me_preview.wav"
-                            }
-                            
-                            if title in title_to_file:
-                                filename_local = title_to_file[title]
-                                media_path = os.path.join(LOCAL_MEDIA_DIR, filename_local)
-                                st.info(f"🔧 Reconstruyendo ruta: {filename_local}")
+                    # Determinar el directorio base según el tipo de tabla
+                    is_image_table = tbl.lower() in ["images", "image"]
+                    base_dir = LOCAL_IMG_DIR if is_image_table else LOCAL_MEDIA_DIR
+                    dir_prefix = "img_queries/" if is_image_table else "media_queries/"
+                    
+                    # Si la ruta es relativa y contiene el prefijo, eliminarlo
+                    if media_path.startswith(dir_prefix):
+                        media_path = media_path[len(dir_prefix):]
+                    
+                    # Si file_path está vacío o es relativo, construir la ruta completa
+                    if not media_path or media_path == "" or not os.path.isabs(media_path):
+                        # Para Images, usar img_queries; para otros, media_queries
+                        if media_path and not os.path.isabs(media_path):
+                            # Si es una ruta relativa, construir la ruta completa
+                            media_path = os.path.join(base_dir, media_path)
+                        elif title and title != f'Resultado {i}':
+                            # Intentar reconstruir la ruta basada en el título
+                            if is_image_table:
+                                # Para imágenes, usar formato img_X.jpg
+                                if title.startswith("img_") and title.endswith(".jpg"):
+                                    media_path = os.path.join(base_dir, title)
+                                else:
+                                    # Intentar extraer número del título
+                                    import re
+                                    match = re.search(r'img_(\d+)', title)
+                                    if match:
+                                        img_num = match.group(1)
+                                        media_path = os.path.join(base_dir, f"img_{img_num}.jpg")
+                            else:
+                                # Mapeo de títulos a archivos conocidos para audio
+                                title_to_file = {
+                                    "Bad Bunny – BAILE INOlVIDABLE": "Bad_Bunny_-_BAILE_INoLVIDABLE_preview.wav",
+                                    "Geto Boys – Bring It On": "Geto_Boys_-_Bring_It_On_preview.wav", 
+                                    "Halestorm – Freak Like Me": "Halestorm_-_Freak_Like_Me_preview.wav"
+                                }
+                                
+                                if title in title_to_file:
+                                    filename_local = title_to_file[title]
+                                    media_path = os.path.join(base_dir, filename_local)
+                                    st.info(f"🔧 Reconstruyendo ruta: {filename_local}")
                     
                     if media_path and isinstance(media_path, str) and media_path.strip():
                         try:
@@ -264,7 +349,7 @@ else:  # Multimedia
                                 else:
                                     st.error(f"❌ No se encontró el archivo: {media_path}")
                             # Para imágenes  
-                            elif filename.lower().endswith(('jpg','png')):
+                            elif filename.lower().endswith(('jpg','png')) or is_image_table:
                                 if os.path.exists(media_path):
                                     st.image(media_path, width=200)
                                     st.success(f"✅ Mostrando: {os.path.basename(media_path)}")
@@ -273,7 +358,7 @@ else:  # Multimedia
                             else:
                                 st.write(f"📁 Archivo: `{media_path}`")
                         except Exception as e:
-                            st.error(f"❌ Error al reproducir: {str(e)}")
+                            st.error(f"❌ Error al mostrar: {str(e)}")
                     else:
                         st.warning(f"⚠️ No se pudo determinar la ruta del archivo para '{title}'")
                         
