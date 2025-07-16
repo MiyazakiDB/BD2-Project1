@@ -91,8 +91,8 @@ def extract_audio_features_with_fallback(audio_path):
 def test_audio_search_with_previews():
     """Compara un archivo de audio específico con el conjunto de audios de prueba"""
     # Rutas de archivos - usar os.path para normalizar las rutas
-    test_audio_path = os.path.normpath("previews_dataset/test_audio")
-    audio_dataset_path = os.path.normpath("previews_dataset/previews")
+    test_audio_path = os.path.normpath("datasets/previews_dataset/test_audio")
+    audio_dataset_path = os.path.normpath("datasets/previews_dataset/previews")
     
     try:
         # Buscar el archivo de audio de prueba (cualquier archivo en el directorio raíz)

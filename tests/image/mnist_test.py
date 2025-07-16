@@ -70,8 +70,8 @@ def test_codebook_creation():
 def test_mnist_search():
     """Compara una imagen específica con el dataset MNIST"""
     # Rutas de archivos
-    test_image_path = r"mnist_dataset\test_image\test_image.jpg"
-    mnist_dataset_path = r"mnist_dataset\numbers"
+    test_image_path = r"datasets\mnist_dataset\test_image\test_image.jpg"
+    mnist_dataset_path = r"datasets\mnist_dataset\numbers"
     
     try:
         # Verificar que la imagen de prueba existe

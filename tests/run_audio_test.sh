@@ -2,10 +2,14 @@
 
 # Definir directorios
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DATASETS_DIR="${SCRIPT_DIR}/datasets"
 REPO_URL="https://github.com/Ianskev/previews_dataset.git"
-REPO_DIR="${SCRIPT_DIR}/previews_dataset"
+REPO_DIR="${DATASETS_DIR}/previews_dataset"
 TEST_AUDIO_DIR="${REPO_DIR}/test_audio"
 PREVIEWS_DIR="${REPO_DIR}/previews"
+
+# Crear directorio datasets si no existe
+mkdir -p "${DATASETS_DIR}"
 
 echo "==== Iniciando descarga y configuración del dataset de audio ===="
 
